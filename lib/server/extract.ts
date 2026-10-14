@@ -476,6 +476,129 @@ function htmlToParagraphs(root: Element): string[] {
   return paragraphs;
 }
 
+/** Page clutter that must never be read aloud. */
+const NON_CONTENT_SELECTORS = [
+  // infoboxes and side panels
+  ".infobox",
+  ".sidebar",
+  ".vertical-navbox",
+  ".metadata",
+  ".ambox",
+  ".hatnote",
+  ".shortdescription",
+  "[role=note]",
+  // navigation
+  "nav",
+  "[role=navigation]",
+  ".navbox",
+  ".navbox-styles",
+  ".navigation-not-searchable",
+  "#toc",
+  ".toc",
+  ".mw-jump-link",
+  "#catlinks",
+  ".catlinks",
+  ".printfooter",
+  ".mw-editsection",
+  ".noprint",
+  ".breadcrumb",
+  ".breadcrumbs",
+  // tables, including data tables
+  "table",
+  // reference lists and citation markers
+  "ol.references",
+  ".references",
+  ".reflist",
+  ".mw-references-wrap",
+  ".refbegin",
+  "sup.reference",
+  "sup.noprint",
+  ".mw-cite-backlink",
+  "[role=doc-endnotes]",
+  "[role=doc-bibliography]",
+  "[role=doc-noteref]",
+].join(",");
+
+const BACK_MATTER_HEADINGS = new Set([
+  "references",
+  "notes",
+  "footnotes",
+  "citations",
+  "sources",
+  "bibliography",
+  "external links",
+  "see also",
+  "further reading",
+]);
+
+/** Returns the heading level (1–6) of an h1–h6 element, otherwise null. */
+function headingTagLevel(el: Element): number | null {
+  const match = /^h([1-6])$/.exec(el.localName.toLowerCase());
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Returns the heading level of a sibling-level node: either a bare h1–h6 or a
+ * MediaWiki `div.mw-heading` wrapper around one. Otherwise null.
+ */
+function blockHeadingLevel(el: Element): number | null {
+  const direct = headingTagLevel(el);
+  if (direct !== null) return direct;
+  if (el.classList.contains("mw-heading")) {
+    const inner = el.querySelector("h1, h2, h3, h4, h5, h6");
+    if (inner) return headingTagLevel(inner);
+    const cls = /\bmw-heading([1-6])\b/.exec(el.className);
+    if (cls) return Number(cls[1]);
+  }
+  return null;
+}
+
+function normalizeHeadingText(text: string): string {
+  return collapseWhitespace(text)
+    .replace(/\s*\[\s*edit\s*\]\s*$/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+/** Removes back-matter sections (References, See also, …) in place. */
+function stripBackMatterSections(root: Document | Element): void {
+  for (const heading of Array.from(root.querySelectorAll("h2, h3, h4"))) {
+    // Skip headings already removed together with an earlier section.
+    if (!root.contains(heading)) continue;
+    const level = headingTagLevel(heading);
+    if (level === null) continue;
+    if (!BACK_MATTER_HEADINGS.has(normalizeHeadingText(heading.textContent ?? ""))) {
+      continue;
+    }
+
+    const parent = heading.parentElement;
+    const block = parent && parent.classList.contains("mw-heading") ? parent : heading;
+
+    let sibling = block.nextSibling;
+    while (sibling) {
+      if (sibling.nodeType === 1 /* ELEMENT_NODE */) {
+        const siblingLevel = blockHeadingLevel(sibling as Element);
+        if (siblingLevel !== null && siblingLevel <= level) break;
+      }
+      const next = sibling.nextSibling;
+      sibling.parentNode?.removeChild(sibling);
+      sibling = next;
+    }
+    block.remove();
+  }
+}
+
+/**
+ * Removes infoboxes, navigation, tables, reference lists, citation markers,
+ * edit links and back-matter sections from `root` in place.
+ */
+export function stripNonContent(root: Document | Element): void {
+  for (const el of Array.from(root.querySelectorAll(NON_CONTENT_SELECTORS))) {
+    el.remove();
+  }
+  stripBackMatterSections(root);
+}
+
 /**
  * Extracts the main readable content of an HTML document as plain text with
  * paragraphs separated by blank lines.
@@ -486,6 +609,7 @@ export function extractReadable(html: string, url: string): ExtractedArticle {
     const document = dom.window.document;
     const documentTitle = collapseWhitespace(document.title ?? "");
 
+    stripNonContent(document);
     const article = new Readability(document).parse();
     if (!article || !article.content) {
       throw new ExtractError("no_content", "Readability found no article");
@@ -493,6 +617,8 @@ export function extractReadable(html: string, url: string): ExtractedArticle {
 
     const container = document.createElement("div");
     container.innerHTML = article.content;
+    // Readability may keep or re-wrap some clutter, so clean its output too.
+    stripNonContent(container);
     const text = htmlToParagraphs(container).join("\n\n");
 
     if (text.length < MIN_TEXT_LENGTH) {

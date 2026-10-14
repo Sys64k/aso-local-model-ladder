@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import {
   assertPublicUrl,
@@ -10,10 +11,16 @@ import {
   fetchHtml,
   isPrivateAddress,
   type LookupFn,
+  stripNonContent,
 } from "./extract";
 
 const ARTICLE_HTML = readFileSync(
   join(__dirname, "../../tests/fixtures/article.html"),
+  "utf8",
+);
+
+const WIKIPEDIA_HTML = readFileSync(
+  join(__dirname, "../../tests/fixtures/wikipedia-article.html"),
   "utf8",
 );
 
@@ -462,5 +469,139 @@ describe("extractReadable", () => {
     expect(() => extractReadable(html, "https://example.com/")).toThrow(
       expect.objectContaining({ code: "no_content" }),
     );
+  });
+});
+
+describe("extractReadable on a Wikipedia article", () => {
+  const WIKI_URL = "https://en.wikipedia.org/wiki/Lighthouse_keeper";
+
+  it("keeps the title and all prose paragraphs without citation markers", () => {
+    const result = extractReadable(WIKIPEDIA_HTML, WIKI_URL);
+    expect(result.title).toMatch(/Lighthouse keeper/);
+
+    const paragraphs = result.text.split("\n\n");
+    expect(paragraphs).toContain(
+      "A lighthouse keeper or lightkeeper is the person responsible for tending and caring for a lighthouse, particularly the light and lens in the days when oil lamps and clockwork mechanisms were used. Lighthouse keepers were sometimes referred to as \"wickies\" because of their job trimming the wicks.",
+    );
+    expect(paragraphs).toContain(
+      "Keepers were needed to trim wicks, replenish fuel, wind clockworks and perform maintenance tasks such as cleaning lenses and windows. Remote lighthouses were often staffed by several keepers who worked in shifts through the night.",
+    );
+    expect(result.text).toContain("The earliest keepers tended open coal fires");
+    expect(paragraphs).toContain(
+      "By the nineteenth century, keepers were usually employed by national lighthouse authorities, which issued strict rules about logbooks, uniforms and the hours at which the light had to be lit. Families often lived at the station and shared the work.",
+    );
+    expect(result.text).toContain("Electrification and automatic lamp changers");
+    expect(result.text).toContain("A keeper's routine typically included lighting the lamp");
+    expect(result.text).toContain("In emergencies, keepers also took part in rescues");
+    expect(paragraphs).toContain("Sounding the fog signal whenever visibility dropped.");
+  });
+
+  it("drops infobox, tables, navigation, references and back matter", () => {
+    const { text } = extractReadable(WIKIPEDIA_HTML, WIKI_URL);
+    for (const unwanted of [
+      "Infobox-Only-Value",
+      "Occupation type",
+      "Hatnote-Only-Novel",
+      "Wikitable-Cell-Alpha",
+      "Wikitable-Cell-Year",
+      "Last staffed stations",
+      "Navbox-Lighthouses-Title",
+      "Navbox-Lightvessel-Link",
+      "Jump to content",
+      "Main menu",
+      "[edit]",
+      "TocEntry-",
+      "Contents",
+      "[citation needed]",
+      "citation needed",
+      "Reflist-Entry-Lighthouse-Service",
+      "Keepers of the Light",
+      "See also",
+      "SeeAlso-Lightvessel-Entry",
+      "External links",
+      "ExternalLink-Lighthouse-Society",
+      "Category-Lighthouse-Occupations",
+      "Category-Maritime-Occupations",
+      "Retrieved from",
+    ]) {
+      expect(text, unwanted).not.toContain(unwanted);
+    }
+    expect(text).not.toMatch(/\[\d+\]/);
+    expect(text).not.toMatch(/\bReferences\b/);
+    expect(text).not.toMatch(/\bedit\b/);
+    expect(text).not.toContain("^");
+  });
+});
+
+describe("stripNonContent", () => {
+  function body(html: string): HTMLElement {
+    return new JSDOM(`<!DOCTYPE html><body>${html}</body>`).window.document.body;
+  }
+
+  it("removes tables, nav, infoboxes and reference lists", () => {
+    const root = body(`
+      <nav><a href="/">Home</a></nav>
+      <div class="infobox">Infobox text</div>
+      <table><tr><td>Data cell</td></tr></table>
+      <p>Prose<sup class="reference"><a href="#n1">[1]</a></sup> stays.</p>
+      <ol class="references"><li>Reference entry</li></ol>
+    `);
+    stripNonContent(root);
+    expect(root.querySelector("nav, table, .infobox, ol, sup")).toBeNull();
+    expect(root.textContent).not.toMatch(/Home|Infobox text|Data cell|Reference entry|\[1\]/);
+    expect(root.querySelector("p")?.textContent).toBe("Prose stays.");
+  });
+
+  it("removes a References section up to the next h2 and keeps that section", () => {
+    const root = body(`
+      <h2>Intro</h2>
+      <p>Intro prose.</p>
+      <h2>References <span class="mw-editsection">[edit]</span></h2>
+      <p>Smith 1999.</p>
+      <h3>Primary sources</h3>
+      <ul><li>Archive entry</li></ul>
+      <h2>Legacy</h2>
+      <p>Legacy prose.</p>
+    `);
+    stripNonContent(root);
+    const text = root.textContent ?? "";
+    expect(text).not.toMatch(/References|Smith 1999|Primary sources|Archive entry|\[edit\]/);
+    expect(text).toContain("Intro prose.");
+    expect(Array.from(root.querySelectorAll("h2")).map((h) => h.textContent)).toEqual([
+      "Intro",
+      "Legacy",
+    ]);
+    expect(text).toContain("Legacy prose.");
+  });
+
+  it("handles mw-heading wrappers and a trailing [edit] in the heading text", () => {
+    const root = body(`
+      <div class="mw-heading mw-heading2"><h2>Body</h2></div>
+      <p>Body prose.</p>
+      <div class="mw-heading mw-heading2"><h2>See also [edit]</h2></div>
+      <ul><li>Related topic</li></ul>
+      <div class="mw-heading mw-heading3"><h3>More</h3></div>
+      <p>Nested back matter.</p>
+      <div class="mw-heading mw-heading2"><h2>Further Reading</h2></div>
+      <ul><li>Some book</li></ul>
+    `);
+    stripNonContent(root);
+    const text = root.textContent ?? "";
+    expect(text).toContain("Body prose.");
+    expect(text).not.toMatch(/See also|Related topic|More|Nested back matter|Further Reading|Some book/);
+  });
+
+  it("leaves normal prose, lists and blockquotes alone", () => {
+    const html = `
+      <h2>Notes on technique</h2>
+      <p>Normal <a href="/x">prose</a> with <sup>2</sup> superscript.</p>
+      <ul><li>First item</li><li>Second item</li></ul>
+      <ol><li>Step one</li></ol>
+      <blockquote><p>A quotation.</p></blockquote>
+    `;
+    const root = body(html);
+    const before = root.innerHTML;
+    stripNonContent(root);
+    expect(root.innerHTML).toBe(before);
   });
 });
