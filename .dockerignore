@@ -1,0 +1,33 @@
+# dependencies & build output (rebuilt inside the image)
+node_modules
+.next
+out
+*.tsbuildinfo
+next-env.d.ts
+
+# VCS / CI / editor
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# tests & reports
+coverage
+playwright-report
+test-results
+blob-report
+playwright/.cache
+
+# docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+compose*.yml
+
+# env & misc
+.env*
+!.env.example
+.DS_Store
+npm-debug.log*
+*.log
