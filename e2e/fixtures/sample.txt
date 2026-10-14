@@ -1,0 +1,4 @@
+This sample file was uploaded in an end-to-end test.
+It has a line break in the middle of a paragraph.
+
+The second paragraph has two sentences. This is the last one.
