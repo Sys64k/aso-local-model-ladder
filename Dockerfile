@@ -43,7 +43,9 @@ USER nextjs
 
 EXPOSE 3000
 
+# Probe the dedicated health endpoint with busybox wget (ships with alpine) and
+# require the expected body, not just a 2xx. Shell form so ${PORT} expands.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -q --spider "http://127.0.0.1:${PORT}/" || exit 1
+  CMD wget -qO- "http://127.0.0.1:${PORT}/api/health" | grep -q '"status":"ok"' || exit 1
 
 CMD ["node", "server.js"]
