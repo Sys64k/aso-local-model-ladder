@@ -2,22 +2,113 @@
 
 @theme inline {
   --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-focus-ring: var(--focus-ring);
+}
+
+/*
+ * Themes. Keep in sync with lib/themes.ts (lib/themes.test.ts checks this and
+ * that every text/background pair reaches a 7:1 contrast ratio).
+ */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #4a4a4a;
+  --surface: #f2f2f2;
+  --accent: #1e3a8a;
+  --accent-fg: #ffffff;
+  --highlight-bg: #ffe066;
+  --highlight-fg: #1a1a1a;
+  --word-bg: #1e3a8a;
+  --word-fg: #ffffff;
+  --focus-ring: #1e3a8a;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121212;
+  --fg: #f0f0f0;
+  --muted: #bdbdbd;
+  --surface: #1e1e1e;
+  --accent: #9cc3ff;
+  --accent-fg: #121212;
+  --highlight-bg: #ffe066;
+  --highlight-fg: #121212;
+  --word-bg: #9cc3ff;
+  --word-fg: #121212;
+  --focus-ring: #9cc3ff;
+}
+
+[data-theme="high-contrast"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --fg: #ffffff;
+  --muted: #d0d0d0;
+  --surface: #111111;
+  --accent: #00ffff;
+  --accent-fg: #000000;
+  --highlight-bg: #ffffff;
+  --highlight-fg: #000000;
+  --word-bg: #ffff00;
+  --word-fg: #000000;
+  --focus-ring: #ffff00;
+}
+
+[data-theme="yellow-black"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --fg: #ffff00;
+  --muted: #cccc00;
+  --surface: #111111;
+  --accent: #ffff00;
+  --accent-fg: #000000;
+  --highlight-bg: #ffff00;
+  --highlight-fg: #000000;
+  --word-bg: #ffffff;
+  --word-fg: #000000;
+  --focus-ring: #ffffff;
+}
+
+[data-theme="sepia"] {
+  color-scheme: light;
+  --bg: #f4ecd8;
+  --fg: #3b2f1e;
+  --muted: #4f4030;
+  --surface: #ebe0c4;
+  --accent: #5c3a00;
+  --accent-fg: #f4ecd8;
+  --highlight-bg: #ffd98a;
+  --highlight-fg: #3b2f1e;
+  --word-bg: #5c3a00;
+  --word-fg: #fff8e7;
+  --focus-ring: #5c3a00;
 }
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    background-color: var(--bg);
+    color: var(--fg);
   }
 
   body {
     font-family: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
     line-height: 1.6;
+    background-color: var(--bg);
+    color: var(--fg);
   }
 
   /* Clearly visible keyboard focus indicator */
   :focus-visible {
-    outline: 3px solid #1d4ed8;
+    outline: 3px solid var(--focus-ring);
     outline-offset: 3px;
     border-radius: 2px;
   }
@@ -41,6 +132,97 @@
     html {
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/* Skip link: off-screen until it receives keyboard focus. */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+  z-index: 100;
+  min-height: 48px;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* --- Reader view --------------------------------------------------------- */
+
+.reader-root {
+  font-family: var(--reader-font);
+  font-size: var(--reader-font-size);
+  line-height: var(--reader-line-height);
+  letter-spacing: var(--reader-letter-spacing);
+  word-spacing: var(--reader-word-spacing);
+}
+
+.reader-text {
+  max-width: 70ch;
+}
+
+.reader-text p + p {
+  margin-top: 1em;
+}
+
+.reader-sentence {
+  cursor: pointer;
+  border-radius: 0.15em;
+}
+
+/* Current sentence: background colour plus a thick underline, so it does not rely on colour alone. */
+.reader-sentence.sentence-highlight {
+  background-color: var(--highlight-bg);
+  color: var(--highlight-fg);
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.2em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.05em 0.1em;
+}
+
+.reader-root mark.word-current {
+  background-color: var(--word-bg);
+  color: var(--word-fg);
+  border-radius: 0.15em;
+  padding: 0 0.05em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.reader-focus {
+  text-align: center;
+}
+
+.reader-focus .focus-current {
+  display: block;
+  font-size: calc(var(--reader-font-size) * 1.5);
+  line-height: var(--reader-line-height);
+  margin: 0.5em 0;
+}
+
+.reader-focus .focus-context {
+  display: block;
+  color: var(--muted);
+}
+
+@media (forced-colors: active) {
+  .reader-sentence.sentence-highlight {
+    outline: 2px solid CanvasText;
+  }
+
+  .reader-root mark.word-current {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
   }
 }
 

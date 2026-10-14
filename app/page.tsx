@@ -1,7 +1,5 @@
+import { ReaderApp } from "@/components/reader/ReaderApp";
+
 export default function Home() {
-  return (
-    <main id="main">
-      <h1>ReadAloud</h1>
-    </main>
-  );
+  return <ReaderApp />;
 }

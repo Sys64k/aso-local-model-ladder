@@ -5,6 +5,7 @@ import {
   Lexend,
   Source_Serif_4,
 } from "next/font/google";
+import { SETTINGS_STORAGE_KEY, THEMES } from "@/lib/settings";
 import "./globals.css";
 
 const atkinson = Atkinson_Hyperlegible({
@@ -44,6 +45,14 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+/**
+ * Apply the saved theme before first paint so there is no flash of the light
+ * theme. ReaderApp keeps data-theme in sync afterwards.
+ */
+const THEME_SCRIPT = `try{var s=JSON.parse(localStorage.getItem(${JSON.stringify(
+  SETTINGS_STORAGE_KEY,
+)})||"{}");var t=s&&s.theme;if(${JSON.stringify(THEMES)}.indexOf(t)>-1)document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -52,8 +61,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-theme="light"
+      suppressHydrationWarning
       className={`${atkinson.variable} ${lexend.variable} ${sourceSerif.variable} ${jetbrainsMono.variable}`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );

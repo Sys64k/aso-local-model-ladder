@@ -97,7 +97,7 @@ function isUrlErrorCode(v: unknown): v is UrlErrorCode {
 const CONTROL =
   "min-h-12 rounded-lg border-2 border-current px-4 py-2 text-lg disabled:cursor-not-allowed disabled:opacity-50";
 const PRIMARY_BUTTON =
-  "min-h-12 rounded-lg bg-blue-700 px-6 py-2 text-lg font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-12 rounded-lg border-2 border-accent bg-accent px-6 py-2 text-lg font-bold text-accent-fg hover:underline disabled:cursor-not-allowed disabled:opacity-50";
 const LABEL = "block text-lg font-bold";
 
 export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => void }) {
