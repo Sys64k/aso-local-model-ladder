@@ -88,6 +88,21 @@ describe("page structure", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Recent documents" })).toBeInTheDocument();
   });
 
+  it("renders a single footer with the app version after main, on home and reader screens", async () => {
+    const { user } = setup();
+    const check = () => {
+      const footers = screen.getAllByRole("contentinfo");
+      expect(footers).toHaveLength(1);
+      const footer = footers[0];
+      expect(footer).toHaveTextContent("ReadAloud dev");
+      expect(within(footer).getByTestId("app-version")).toHaveTextContent("dev");
+      expect(screen.getByRole("main").nextElementSibling).toBe(footer);
+    };
+    check();
+    await importText(user);
+    check();
+  });
+
   it("gives every button a minimum height of at least 48px", async () => {
     const { user } = setup();
     await importText(user);
