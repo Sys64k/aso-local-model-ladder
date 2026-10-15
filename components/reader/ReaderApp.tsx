@@ -22,6 +22,7 @@ import {
 } from "@/lib/speech/controller";
 import { THEME_NAMES } from "@/lib/themes";
 import { Announcer, useAnnouncer } from "./Announcer";
+import { Footer } from "./Footer";
 import { PlaybackControls, formatRate } from "./PlaybackControls";
 import { ReaderView } from "./ReaderView";
 import { RecentDocuments } from "./RecentDocuments";
@@ -330,7 +331,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
 
   return (
     <>
-      <div inert={dialogOpen} className="min-h-screen bg-bg text-fg">
+      <div inert={dialogOpen} className="flex min-h-screen flex-col bg-bg text-fg">
         <a href="#main" className="skip-link">
           Skip to content
         </a>
@@ -360,7 +361,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
           </div>
         </header>
 
-        <main id="main" tabIndex={-1} className="mx-auto max-w-6xl space-y-6 px-4 py-6 outline-none">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-6 outline-none">
           {speechSupported === false && (
             <div
               role="note"
@@ -454,6 +455,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
             </div>
           )}
         </main>
+        <Footer />
       </div>
 
       <SettingsPanel
