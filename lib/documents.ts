@@ -11,15 +11,20 @@ export interface SavedDocument {
   createdAt: number;
   updatedAt: number;
   lastSentenceIndex: number;
+  /** Free-text note. Older stored documents without a note read as "". */
+  note: string;
 }
 
 export const DOCUMENTS_STORAGE_KEY = "readaloud:documents:v1";
 export const MAX_DOCUMENTS = 20;
 export const TITLE_MAX_LENGTH = 60;
+export const NOTE_MAX_LENGTH = 10_000;
+export const NOTE_PREVIEW_LENGTH = 80;
 
 const SOURCES: readonly DocumentSource[] = ["paste", "file", "pdf", "image", "url"];
 
-function isDocument(v: unknown): v is SavedDocument {
+/** Validates the stored shape; `note` is optional so older v1 data stays valid. */
+function isDocument(v: unknown): v is Omit<SavedDocument, "note"> & { note?: unknown } {
   if (!v || typeof v !== "object") return false;
   const d = v as Record<string, unknown>;
   return (
@@ -45,7 +50,10 @@ function read(storage: Storage | null): SavedDocument[] {
     const raw = storage.getItem(DOCUMENTS_STORAGE_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isDocument) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(isDocument)
+      .map((d) => ({ ...d, note: typeof d.note === "string" ? d.note : "" }));
   } catch {
     return [];
   }
@@ -105,6 +113,7 @@ export function saveDocument(
       createdAt: now,
       updatedAt: now,
       lastSentenceIndex: 0,
+      note: "",
     };
   }
   const rest = docs.filter((d) => d.id !== doc.id);
@@ -134,6 +143,44 @@ export function updateProgress(
     store,
     sortNewestFirst([updated, ...docs.filter((d) => d.id !== id)]),
   );
+}
+
+/**
+ * Save the note for a document. The note is truncated to NOTE_MAX_LENGTH and
+ * otherwise stored as-is (not trimmed). Marks the document as recently used.
+ * Returns the updated document, or null if the id is unknown. Never throws.
+ */
+export function updateNote(
+  id: string,
+  note: string,
+  storage?: Storage | null,
+): SavedDocument | null {
+  const store = resolve(storage);
+  const docs = listDocuments(store);
+  const doc = docs.find((d) => d.id === id);
+  if (!doc) return null;
+  const value = typeof note === "string" ? note.slice(0, NOTE_MAX_LENGTH) : "";
+  const updated: SavedDocument = { ...doc, note: value, updatedAt: Date.now() };
+  write(
+    store,
+    sortNewestFirst([updated, ...docs.filter((d) => d.id !== id)]),
+  );
+  return updated;
+}
+
+/**
+ * Single-line preview of a note: whitespace collapsed, "" for blank notes,
+ * long notes cut at a word boundary with an ellipsis (like deriveTitle).
+ */
+export function notePreview(note: string, max = NOTE_PREVIEW_LENGTH): string {
+  const clean = (typeof note === "string" ? note : "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  if (clean.length <= max) return clean;
+  const slice = clean.slice(0, max + 1);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : clean.slice(0, max);
+  const stripped = cut.replace(/[\s,;:.\-–—]+$/, "");
+  return `${stripped || clean.slice(0, max)}…`;
 }
 
 export function deleteDocument(id: string, storage?: Storage | null): void {
