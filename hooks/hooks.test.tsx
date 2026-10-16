@@ -8,6 +8,7 @@ import {
   installFakeSpeech,
 } from "@/tests/fakes/speechSynthesis";
 import { MemoryStorage } from "@/tests/fakes/storage";
+import { useNoteSpeech } from "./useNoteSpeech";
 import { useSettings } from "./useSettings";
 import { useSpeech } from "./useSpeech";
 import { useVoices } from "./useVoices";
@@ -203,6 +204,74 @@ describe("useSpeech", () => {
     act(() => result.current.play());
     expect(result.current.state.error).toMatch(/not supported/);
     installed = installFakeSpeech();
+  });
+});
+
+describe("useNoteSpeech", () => {
+  it("does not touch the speech engine until read() is called", () => {
+    const { fake, synth, Utterance } = createFakeSpeech();
+    const { result } = renderHook(() => useNoteSpeech(OPTIONS, { synth, Utterance }));
+    expect(result.current.status).toBe("idle");
+    expect(fake.calls).toEqual([]);
+    // stop() while idle must not cancel someone else's speech.
+    act(() => result.current.stop());
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("reads text sentence by sentence with the current options and stops", () => {
+    const { fake, synth, Utterance } = createFakeSpeech();
+    const { result, rerender } = renderHook(
+      ({ options }) => useNoteSpeech(options, { synth, Utterance }),
+      { initialProps: { options: { ...OPTIONS, pitch: 1.4 } } },
+    );
+    act(() => result.current.read(TEXT));
+    expect(result.current.status).toBe("playing");
+    expect(fake.spokenTexts).toEqual(["One sentence."]);
+    expect(fake.lastSpoken?.pitch).toBe(1.4);
+
+    rerender({ options: { ...OPTIONS, rate: 1.5 } });
+    expect(fake.lastSpoken?.text).toBe("One sentence.");
+    expect(fake.lastSpoken?.rate).toBe(1.5);
+
+    act(() => fake.finishCurrent());
+    expect(fake.lastSpoken?.text).toBe("Two sentence.");
+
+    act(() => result.current.stop());
+    expect(result.current.status).toBe("idle");
+    expect(fake.speaking).toBe(false);
+  });
+
+  it("returns to idle after the last sentence and can read new text", () => {
+    const { fake, synth, Utterance } = createFakeSpeech();
+    const { result } = renderHook(() => useNoteSpeech(OPTIONS, { synth, Utterance }));
+    act(() => result.current.read("Only one."));
+    act(() => fake.finishCurrent());
+    expect(result.current.status).toBe("idle");
+    act(() => result.current.read("Another note. Second."));
+    expect(fake.spokenTexts).toEqual(["Only one.", "Another note."]);
+  });
+
+  it("disposes its controller on unmount", () => {
+    const { fake, synth, Utterance } = createFakeSpeech();
+    const { result, unmount } = renderHook(() => useNoteSpeech(OPTIONS, { synth, Utterance }));
+    act(() => result.current.read(TEXT));
+    unmount();
+    expect(fake.speaking).toBe(false);
+  });
+
+  it("does not access speech synthesis during server render", async () => {
+    const { renderToString } = await import("react-dom/server");
+    const installed = installFakeSpeech();
+    function Probe() {
+      const { status } = useNoteSpeech(OPTIONS);
+      return <p>{status}</p>;
+    }
+    try {
+      expect(renderToString(<Probe />)).toContain("idle");
+      expect(installed.fake.calls).toEqual([]);
+    } finally {
+      installed.restore();
+    }
   });
 });
 

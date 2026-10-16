@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ImportPanel } from "@/components/input/ImportPanel";
 import type { ImportedText } from "@/components/input/types";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useNoteSpeech } from "@/hooks/useNoteSpeech";
 import { useSettings } from "@/hooks/useSettings";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useVoices } from "@/hooks/useVoices";
@@ -11,6 +12,7 @@ import {
   deleteDocument,
   listDocuments,
   saveDocument,
+  updateNote,
   updateProgress,
   type SavedDocument,
 } from "@/lib/documents";
@@ -23,6 +25,7 @@ import {
 import { THEME_NAMES } from "@/lib/themes";
 import { Announcer, useAnnouncer } from "./Announcer";
 import { Footer } from "./Footer";
+import { NotesPanel } from "./NotesPanel";
 import { PlaybackControls, formatRate } from "./PlaybackControls";
 import { ReaderView } from "./ReaderView";
 import { RecentDocuments } from "./RecentDocuments";
@@ -32,6 +35,8 @@ import { ShortcutsDialog } from "./ShortcutsDialog";
 export const SAMPLE_SENTENCE = "This is how the reading voice sounds with your settings.";
 /** Debounce for saving the reading position. */
 export const PROGRESS_SAVE_DELAY_MS = 500;
+/** Debounce for saving the note. */
+export const NOTE_SAVE_DELAY_MS = 500;
 
 const HEADER_BUTTON =
   "min-h-12 min-w-12 rounded-lg border-2 border-fg bg-bg px-4 py-2 text-lg font-bold text-fg";
@@ -69,7 +74,11 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
   );
   const speech = useSpeech(text, speechOptions, speechDeps);
   const { state, sentences } = speech;
+  const noteSpeech = useNoteSpeech(speechOptions, speechDeps);
+  const noteStatus = noteSpeech.status;
   const voices = useVoices(speechDeps?.synth);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
 
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const shortcutsButtonRef = useRef<HTMLButtonElement>(null);
@@ -81,6 +90,8 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
   const focusRequest = useRef<"reader" | "home" | null>(null);
   const stopRequested = useRef(false);
   const pendingProgress = useRef<{ id: string; index: number } | null>(null);
+  const pendingNote = useRef<{ id: string; note: string } | null>(null);
+  const noteStopRequested = useRef(false);
 
   // --- mount ---------------------------------------------------------------
   useEffect(() => {
@@ -130,6 +141,23 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
     stopRequested.current = false;
   }, [state.status, state.error, state.sentenceIndex, state.sentenceCount, announce]);
 
+  // Runs after the document's announcements, so when the note interrupts the
+  // document the final message is "Reading note" rather than "Stopped".
+  const prevNoteStatus = useRef(noteStatus);
+  useEffect(() => {
+    const prev = prevNoteStatus.current;
+    prevNoteStatus.current = noteStatus;
+    if (prev === noteStatus) return;
+    if (noteStatus === "playing") {
+      announce("Reading note");
+    } else if (noteStatus === "idle") {
+      if (!noteStopRequested.current) announce("Finished reading note");
+      // When document playback took over, its "Playing" stays the last word.
+      else if (prevStatus.current !== "playing") announce("Stopped reading note");
+    }
+    noteStopRequested.current = false;
+  }, [noteStatus, announce]);
+
   // Once reading starts the resume offer is no longer relevant.
   useEffect(() => {
     if (state.status === "playing") setResumeIndex(null);
@@ -163,10 +191,44 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
     };
   }, [flushProgress]);
 
+  // --- save the note (debounced) ---------------------------------------------
+  const flushNote = useCallback(() => {
+    const entry = pendingNote.current;
+    pendingNote.current = null;
+    if (entry) updateNote(entry.id, entry.note, storage);
+    setNoteSaving(false);
+  }, [storage]);
+
+  useEffect(() => {
+    if (!pendingNote.current) return;
+    const timer = setTimeout(flushNote, NOTE_SAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [noteDraft, flushNote]);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", flushNote);
+    return () => {
+      window.removeEventListener("pagehide", flushNote);
+      flushNote();
+    };
+  }, [flushNote]);
+
+  const handleNoteChange = useCallback(
+    (value: string) => {
+      if (docId) {
+        pendingNote.current = { id: docId, note: value };
+        setNoteSaving(true);
+      }
+      setNoteDraft(value);
+    },
+    [docId],
+  );
+
   // --- actions ---------------------------------------------------------------
   const openDocument = useCallback((d: SavedDocument) => {
     focusRequest.current = "reader";
     setResumeIndex(d.lastSentenceIndex > 0 ? d.lastSentenceIndex : null);
+    setNoteDraft(d.note ?? "");
     setDoc(d);
   }, []);
 
@@ -190,33 +252,56 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
     (d: SavedDocument) => {
       deleteDocument(d.id, storage);
       setDocuments(listDocuments(storage));
-      announce(`Deleted ${d.title}`);
+      announce(d.note.trim() ? `Deleted ${d.title} and its note` : `Deleted ${d.title}`);
       recentHeadingRef.current?.focus();
     },
     [storage, announce],
   );
 
-  const stop = useCallback(() => {
+  const stopDocument = useCallback(() => {
     if (state.status !== "idle") stopRequested.current = true;
     speech.stop();
   }, [speech, state.status]);
 
+  const stopNote = useCallback(() => {
+    if (noteStatus === "idle") return;
+    noteStopRequested.current = true;
+    noteSpeech.stop();
+  }, [noteSpeech, noteStatus]);
+
+  /** Stop button, Escape, New document, Test voice: stops the document and the note. */
+  const stop = useCallback(() => {
+    stopNote();
+    stopDocument();
+  }, [stopNote, stopDocument]);
+
+  const readNote = useCallback(() => {
+    if (!speechAvailable || noteDraft.trim() === "") return;
+    stopDocument();
+    noteSpeech.read(noteDraft);
+  }, [speechAvailable, noteDraft, stopDocument, noteSpeech]);
+
   const goHome = useCallback(() => {
     stop();
     flushProgress();
+    flushNote();
     setDocuments(listDocuments(storage));
     setResumeIndex(null);
     focusRequest.current = "home";
     setDoc(null);
-  }, [stop, flushProgress, storage]);
+  }, [stop, flushProgress, flushNote, storage]);
 
   /** Start reading at a sentence (or just move there when speech is unavailable). */
   const readFrom = useCallback(
     (index: number) => {
-      if (speechAvailable) speech.play(index);
-      else speech.jumpTo(index);
+      if (speechAvailable) {
+        stopNote();
+        speech.play(index);
+      } else {
+        speech.jumpTo(index);
+      }
     },
-    [speech, speechAvailable],
+    [speech, speechAvailable, stopNote],
   );
 
   const handleResume = useCallback(
@@ -230,8 +315,9 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
 
   const togglePlay = useCallback(() => {
     if (!speechAvailable) return;
+    stopNote();
     speech.toggle();
-  }, [speech, speechAvailable]);
+  }, [speech, speechAvailable, stopNote]);
 
   const changeTextSize = useCallback(
     (delta: number) => {
@@ -445,13 +531,24 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
                 playButtonRef={playButtonRef}
               />
 
-              <ReaderView
-                text={text}
-                currentIndex={state.sentenceIndex}
-                wordRange={state.wordRange}
-                settings={settings}
-                onActivate={readFrom}
-              />
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                <ReaderView
+                  text={text}
+                  currentIndex={state.sentenceIndex}
+                  wordRange={state.wordRange}
+                  settings={settings}
+                  onActivate={readFrom}
+                />
+                <NotesPanel
+                  value={noteDraft}
+                  onChange={handleNoteChange}
+                  saveStatus={noteSaving ? "saving" : "saved"}
+                  reading={noteStatus !== "idle"}
+                  speechAvailable={speechAvailable}
+                  onRead={readNote}
+                  onStopReading={stopNote}
+                />
+              </div>
             </div>
           )}
         </main>
