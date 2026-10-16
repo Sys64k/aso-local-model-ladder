@@ -2,11 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryStorage } from "@/tests/fakes/storage";
 import {
   DOCUMENTS_STORAGE_KEY,
+  MAX_DOCUMENTS,
+  NOTE_MAX_LENGTH,
+  NOTE_PREVIEW_LENGTH,
   deleteDocument,
   deriveTitle,
   getDocument,
   listDocuments,
+  notePreview,
   saveDocument,
+  updateNote,
   updateProgress,
 } from "./documents";
 
@@ -37,6 +42,7 @@ describe("document store", () => {
       createdAt: now,
       updatedAt: now,
       lastSentenceIndex: 0,
+      note: "",
     });
     expect(typeof doc.id).toBe("string");
     expect(doc.id.length).toBeGreaterThan(0);
@@ -146,6 +152,183 @@ describe("document store", () => {
     expect(() => saveDocument({ title: "C", text: "c", source: "image" }, storage)).not.toThrow();
     expect(() => updateProgress(ok.id, 2, storage)).not.toThrow();
     expect(() => deleteDocument(ok.id, storage)).not.toThrow();
+  });
+});
+
+describe("document notes", () => {
+  it("new documents start with an empty note", () => {
+    const doc = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    expect(doc.note).toBe("");
+    expect(getDocument(doc.id, storage)?.note).toBe("");
+    expect(listDocuments(storage)[0].note).toBe("");
+  });
+
+  it("stores a note, returns the updated doc and moves it to the top", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    tick();
+    const b = saveDocument({ title: "B", text: "b", source: "paste" }, storage);
+    tick();
+    const note = "  Remember:\n  chapter 3 is key.  ";
+    const updated = updateNote(a.id, note, storage);
+    expect(updated).toMatchObject({ id: a.id, note, updatedAt: now, createdAt: a.createdAt });
+    expect(getDocument(a.id, storage)).toEqual(updated);
+    expect(listDocuments(storage).map((d) => d.id)).toEqual([a.id, b.id]);
+    expect(listDocuments(storage)[0].note).toBe(note);
+    expect(storage.getItem(DOCUMENTS_STORAGE_KEY)).toContain("chapter 3 is key.");
+  });
+
+  it("can clear a note", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    updateNote(a.id, "something", storage);
+    expect(updateNote(a.id, "", storage)?.note).toBe("");
+    expect(getDocument(a.id, storage)?.note).toBe("");
+  });
+
+  it("truncates notes to NOTE_MAX_LENGTH", () => {
+    expect(NOTE_MAX_LENGTH).toBe(10_000);
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    const updated = updateNote(a.id, "y".repeat(NOTE_MAX_LENGTH + 500), storage);
+    expect(updated?.note).toHaveLength(NOTE_MAX_LENGTH);
+    expect(getDocument(a.id, storage)?.note).toHaveLength(NOTE_MAX_LENGTH);
+    const exact = "z".repeat(NOTE_MAX_LENGTH);
+    expect(updateNote(a.id, exact, storage)?.note).toBe(exact);
+  });
+
+  it("returns null for unknown ids and does not write", () => {
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    const writes = storage.writes;
+    expect(updateNote("missing", "note", storage)).toBeNull();
+    expect(storage.writes).toBe(writes);
+  });
+
+  it("keeps the note when re-saving identical text", () => {
+    const first = saveDocument({ title: "Old", text: "Same text.", source: "paste" }, storage);
+    updateNote(first.id, "my note", storage);
+    tick();
+    const again = saveDocument({ title: "New", text: "Same text.", source: "file" }, storage);
+    expect(again.id).toBe(first.id);
+    expect(again.note).toBe("my note");
+    expect(getDocument(first.id, storage)?.note).toBe("my note");
+  });
+
+  it("reads old v1 data without a note (or a non-string note) as an empty note", () => {
+    const base = {
+      title: "Old",
+      text: "old text",
+      source: "paste",
+      createdAt: 1,
+      updatedAt: 2,
+      lastSentenceIndex: 4,
+    };
+    storage.setItem(
+      DOCUMENTS_STORAGE_KEY,
+      JSON.stringify([
+        { ...base, id: "no-note" },
+        { ...base, id: "num-note", text: "other", updatedAt: 1, note: 42 },
+        { ...base, id: "null-note", text: "third", updatedAt: 0, note: null },
+      ]),
+    );
+    const list = listDocuments(storage);
+    expect(list.map((d) => d.id)).toEqual(["no-note", "num-note", "null-note"]);
+    expect(list.every((d) => d.note === "")).toBe(true);
+    expect(getDocument("no-note", storage)).toEqual({ ...base, id: "no-note", note: "" });
+
+    const updated = updateNote("no-note", "now with a note", storage);
+    expect(updated).toMatchObject({ ...base, id: "no-note", note: "now with a note", updatedAt: now });
+    expect(listDocuments(storage)).toHaveLength(3);
+  });
+
+  it("still rejects otherwise invalid documents that have a note", () => {
+    storage.setItem(
+      DOCUMENTS_STORAGE_KEY,
+      JSON.stringify([{ id: "x", title: "t", text: "x", source: "bogus", note: "hi" }]),
+    );
+    expect(listDocuments(storage)).toEqual([]);
+  });
+
+  it("removes the note from storage when the document is deleted", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    const b = saveDocument({ title: "B", text: "b", source: "paste" }, storage);
+    updateNote(a.id, "secret-note-a", storage);
+    updateNote(b.id, "note-b", storage);
+    deleteDocument(a.id, storage);
+    const raw = storage.getItem(DOCUMENTS_STORAGE_KEY) ?? "";
+    expect(raw).not.toContain("secret-note-a");
+    expect(raw).toContain("note-b");
+    expect(getDocument(a.id, storage)).toBeNull();
+  });
+
+  it("drops the note with the document when the cap evicts it", () => {
+    const oldest = saveDocument({ title: "Old", text: "oldest", source: "paste" }, storage);
+    updateNote(oldest.id, "evicted-note", storage);
+    for (let i = 0; i < MAX_DOCUMENTS; i++) {
+      tick();
+      saveDocument({ title: `D${i}`, text: `text ${i}`, source: "paste" }, storage);
+    }
+    expect(listDocuments(storage)).toHaveLength(MAX_DOCUMENTS);
+    expect(getDocument(oldest.id, storage)).toBeNull();
+    expect(storage.getItem(DOCUMENTS_STORAGE_KEY)).not.toContain("evicted-note");
+  });
+
+  it("updateNote never throws when writes fail", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    storage.failWrites = true;
+    let result: ReturnType<typeof updateNote> = null;
+    expect(() => {
+      result = updateNote(a.id, "unsaved", storage);
+    }).not.toThrow();
+    expect(result).toMatchObject({ id: a.id, note: "unsaved" });
+    expect(getDocument(a.id, storage)?.note).toBe("");
+    expect(() => updateNote("missing", "x", storage)).not.toThrow();
+  });
+
+  it("updateNote never throws when reads fail", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    storage.failReads = true;
+    let result: ReturnType<typeof updateNote> = null;
+    expect(() => {
+      result = updateNote(a.id, "note", storage);
+    }).not.toThrow();
+    expect(result).toBeNull();
+  });
+});
+
+describe("notePreview", () => {
+  it("collapses whitespace and returns short notes unchanged", () => {
+    expect(notePreview("  Hello\n\n   world \t ")).toBe("Hello world");
+    expect(notePreview("Short note.")).toBe("Short note.");
+  });
+
+  it("returns an empty string for blank notes", () => {
+    expect(notePreview("")).toBe("");
+    expect(notePreview("   \n\t ")).toBe("");
+  });
+
+  it("cuts long notes at a word boundary with an ellipsis", () => {
+    expect(NOTE_PREVIEW_LENGTH).toBe(80);
+    const note =
+      "This note is deliberately long so that it goes well past the eighty character preview limit, really.";
+    const preview = notePreview(note);
+    expect(preview.endsWith("…")).toBe(true);
+    expect(preview.length).toBeLessThanOrEqual(81);
+    const body = preview.slice(0, -1);
+    expect(note.startsWith(body)).toBe(true);
+    expect(note[body.length]).toMatch(/[\s,]/);
+    expect(preview).toBe(
+      "This note is deliberately long so that it goes well past the eighty character…",
+    );
+  });
+
+  it("strips trailing punctuation before the ellipsis", () => {
+    expect(notePreview("one two, three four", 10)).toBe("one two…");
+  });
+
+  it("respects a custom max", () => {
+    expect(notePreview("alpha beta gamma delta", 12)).toBe("alpha beta…");
+  });
+
+  it("hard-cuts a single very long word", () => {
+    expect(notePreview("x".repeat(200))).toBe(`${"x".repeat(80)}…`);
   });
 });
 
