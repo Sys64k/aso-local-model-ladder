@@ -1,7 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listDocuments, saveDocument, updateProgress } from "@/lib/documents";
+import {
+  NOTE_MAX_LENGTH,
+  listDocuments,
+  saveDocument,
+  updateNote,
+  updateProgress,
+} from "@/lib/documents";
 import { SETTINGS_STORAGE_KEY } from "@/lib/settings";
 import { fakeVoice, installFakeSpeech } from "@/tests/fakes/speechSynthesis";
 import { ReaderApp, SAMPLE_SENTENCE } from "./ReaderApp";
@@ -612,6 +618,237 @@ describe("recent documents", () => {
     expect(screen.queryByRole("button", { name: /^Old one/ })).not.toBeInTheDocument();
     expect(listDocuments()).toHaveLength(0);
     expect(screen.getByRole("heading", { name: "Recent documents" })).toHaveFocus();
+  });
+});
+
+describe("notes", () => {
+  const NOTE = "Remember this. Check the second part.";
+  const NOTE_SENTENCES = ["Remember this.", "Check the second part."];
+
+  function noteBox(): HTMLElement {
+    return screen.getByRole("textbox", { name: "Note for this document" });
+  }
+
+  function saveStatus(): string {
+    return screen.getByTestId("note-save-status").textContent ?? "";
+  }
+
+  function setNote(value = NOTE) {
+    fireEvent.change(noteBox(), { target: { value } });
+  }
+
+  it("renders a Notes section with a labelled textarea after the document text", async () => {
+    const { user } = setup();
+    await importText(user);
+    const heading = screen.getByRole("heading", { level: 2, name: "Notes" });
+    const panel = screen.getByRole("region", { name: "Notes" });
+    expect(panel).toContainElement(heading);
+    const box = noteBox();
+    expect(panel).toContainElement(box);
+    expect(box.tagName).toBe("TEXTAREA");
+    expect(box).toHaveAttribute("maxLength", String(NOTE_MAX_LENGTH));
+    expect(box).toHaveAttribute("rows", "8");
+    expect(box).toHaveAccessibleDescription("Saved automatically on this device.");
+    expect(box).toHaveValue("");
+    expect(saveStatus()).toBe("Saved");
+    expect(screen.getByTestId("note-save-status")).not.toHaveAttribute("aria-live");
+    const text = screen.getByRole("region", { name: "Document text" });
+    expect(text.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.parentElement?.className).toMatch(/lg:grid-cols-/);
+  });
+
+  it("saves the note after the debounce and shows the save status", async () => {
+    const { user } = setup();
+    await importText(user);
+    setNote("Hello");
+    expect(saveStatus()).toBe("Saving…");
+    expect(listDocuments()[0].note).toBe("");
+    await waitFor(() => expect(listDocuments()[0].note).toBe("Hello"));
+    expect(saveStatus()).toBe("Saved");
+  });
+
+  it("saves immediately on New document and shows the note when reopened (also after reload)", async () => {
+    const { user, unmount } = setup();
+    await importText(user);
+    setNote("My note");
+    await user.click(screen.getByRole("button", { name: "New document" }));
+    expect(listDocuments()[0].note).toBe("My note");
+    await user.click(screen.getByRole("button", { name: /^First sentence here\./ }));
+    expect(noteBox()).toHaveValue("My note");
+
+    unmount();
+    const user2 = userEvent.setup();
+    render(<ReaderApp />);
+    await user2.click(screen.getByRole("button", { name: /^First sentence here\./ }));
+    expect(noteBox()).toHaveValue("My note");
+  });
+
+  it("saves immediately on pagehide and on unmount", async () => {
+    const { user, unmount } = setup();
+    await importText(user);
+    setNote("Before hide");
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(listDocuments()[0].note).toBe("Before hide");
+    setNote("Before unmount");
+    unmount();
+    expect(listDocuments()[0].note).toBe("Before unmount");
+  });
+
+  it("Read note speaks the note sentence by sentence and toggles the button", async () => {
+    const { user } = setup();
+    const { fake } = installed;
+    await importText(user);
+    fireEvent.change(
+      within(screen.getByRole("group", { name: "Playback" })).getByRole("slider", {
+        name: "Reading speed",
+      }),
+      { target: { value: "1.3" } },
+    );
+    setNote();
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    expect(fake.spokenTexts).toEqual([NOTE_SENTENCES[0]]);
+    expect(fake.lastSpoken?.rate).toBe(1.3);
+    expect(screen.getByRole("button", { name: "Stop reading note" })).toBeInTheDocument();
+    expect(announcer()).toBe("Reading note");
+    act(() => fake.finishCurrent());
+    expect(fake.spokenTexts).toEqual(NOTE_SENTENCES);
+    act(() => fake.finishCurrent());
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+    expect(announcer()).toBe("Finished reading note");
+  });
+
+  it("Stop reading note stops the note", async () => {
+    const { user } = setup();
+    await importText(user);
+    setNote();
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    await user.click(screen.getByRole("button", { name: "Stop reading note" }));
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+    expect(announcer()).toBe("Stopped reading note");
+    expect(installed.fake.speaking).toBe(false);
+  });
+
+  it("reading the note stops document playback, and vice versa", async () => {
+    const { user } = setup();
+    const { fake } = installed;
+    await importText(user);
+    setNote();
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(announcer()).toBe("Playing");
+
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(fake.current?.text).toBe(NOTE_SENTENCES[0]);
+    expect(announcer()).toBe("Reading note");
+
+    // Play stops the note.
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    expect(fake.current?.text).toBe(SENTENCES[0]);
+    expect(announcer()).toBe("Playing");
+
+    // Clicking a sentence stops the note too.
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    expect(fake.current?.text).toBe(NOTE_SENTENCES[0]);
+    await user.click(sentence(2));
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+    expect(fake.current?.text).toBe(SENTENCES[2]);
+
+    // The note's end events no longer drive anything.
+    act(() => fake.finishCurrent());
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+  });
+
+  it("the resume buttons stop the note", async () => {
+    const doc = saveDocument({ title: "My article", text: TEXT, source: "paste" });
+    updateProgress(doc.id, 1);
+    updateNote(doc.id, NOTE);
+    const { user } = setup();
+    const { fake } = installed;
+    await user.click(screen.getByRole("button", { name: /^My article/ }));
+    expect(noteBox()).toHaveValue(NOTE);
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    await user.click(screen.getByRole("button", { name: "Continue from sentence 2" }));
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+    expect(fake.current?.text).toBe(SENTENCES[1]);
+  });
+
+  it("Stop, Escape and New document stop the note", async () => {
+    const { user } = setup();
+    const { fake } = installed;
+    await importText(user);
+    setNote();
+
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+    expect(announcer()).toBe("Stopped reading note");
+    expect(fake.speaking).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    screen.getByRole("heading", { level: 1 }).focus();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Read note" })).toBeInTheDocument();
+    expect(announcer()).toBe("Stopped reading note");
+
+    await user.click(screen.getByRole("button", { name: "Read note" }));
+    await user.click(screen.getByRole("button", { name: "New document" }));
+    expect(fake.speaking).toBe(false);
+    expect(announcer()).toBe("Stopped reading note");
+  });
+
+  it("typing in the note does not interrupt the document or start playback", async () => {
+    const { user } = setup();
+    const { fake } = installed;
+    await importText(user);
+    const box = noteBox();
+    await user.click(box);
+    await user.keyboard(" k K");
+    expect(box).toHaveValue(" k K");
+    expect(fake.spoken).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    const cancels = fake.calls.filter((c) => c === "cancel").length;
+    await user.click(box);
+    await user.keyboard("Hello. More text k");
+    expect(fake.calls.filter((c) => c === "cancel").length).toBe(cancels);
+    expect(fake.current?.text).toBe(SENTENCES[0]);
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+  });
+
+  it("Read note is disabled for a blank note and without speech", async () => {
+    const { user } = setup();
+    await importText(user);
+    const read = () => screen.getByRole("button", { name: "Read note" });
+    expect(read()).toBeDisabled();
+    expect(read().className).toMatch(/\bmin-h-12\b/);
+    setNote("   \n ");
+    expect(read()).toBeDisabled();
+    setNote("Something");
+    expect(read()).toBeEnabled();
+  });
+
+  it("Read note is disabled when speech is unavailable", async () => {
+    restoreSpeech();
+    const { user } = setup();
+    await importText(user);
+    setNote("Something");
+    expect(screen.getByRole("button", { name: "Read note" })).toBeDisabled();
+  });
+
+  it("deleting a document with a note says so", async () => {
+    const withNote = saveDocument({ title: "Noted", text: "Has a note.", source: "file" });
+    updateNote(withNote.id, "Important");
+    saveDocument({ title: "Plain", text: "No note here.", source: "file" });
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Delete Noted" }));
+    expect(announcer()).toBe("Deleted Noted and its note");
+    await user.click(screen.getByRole("button", { name: "Delete Plain" }));
+    expect(announcer()).toBe("Deleted Plain");
   });
 });
 
