@@ -1,7 +1,7 @@
 "use client";
 
 import { type Ref } from "react";
-import type { DocumentSource, SavedDocument } from "@/lib/documents";
+import { notePreview, type DocumentSource, type SavedDocument } from "@/lib/documents";
 
 export const SOURCE_LABELS: Record<DocumentSource, string> = {
   paste: "Pasted text",
@@ -42,7 +42,9 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef }: Rec
         </p>
       ) : (
         <ul className="space-y-3">
-          {documents.map((doc) => (
+          {documents.map((doc) => {
+            const preview = notePreview(doc.note);
+            return (
             <li
               key={doc.id}
               className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2"
@@ -56,6 +58,14 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef }: Rec
                 <span className="text-base text-muted">
                   {SOURCE_LABELS[doc.source]} · {formatDate(doc.updatedAt)}
                 </span>
+                {preview ? (
+                  <>
+                    {" "}
+                    <span data-testid="note-preview" className="text-base text-fg break-words">
+                      Note: {preview}
+                    </span>
+                  </>
+                ) : null}
               </button>
               <button
                 type="button"
@@ -66,7 +76,8 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef }: Rec
                 Delete
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </section>
