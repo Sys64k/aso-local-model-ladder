@@ -473,6 +473,8 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
                 onOpen={handleOpenRecent}
                 onDelete={handleDelete}
                 headingRef={recentHeadingRef}
+                storage={storage}
+                onClearAll={() => setDocuments(listDocuments(storage))}
               />
             </div>
           ) : (
