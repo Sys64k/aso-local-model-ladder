@@ -619,6 +619,20 @@ describe("recent documents", () => {
     expect(listDocuments()).toHaveLength(0);
     expect(screen.getByRole("heading", { name: "Recent documents" })).toHaveFocus();
   });
+
+  it("renames a document from the list and keeps the new title", async () => {
+    const doc = saveDocument({ title: "Old title", text: TEXT, source: "paste" });
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Rename Old title" }));
+    const field = screen.getByRole("textbox", { name: /title/i });
+    await user.clear(field);
+    await user.type(field, "Fresh title{Enter}");
+    expect(listDocuments().find((d) => d.id === doc.id)?.title).toBe("Fresh title");
+    expect(listDocuments()).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /^Old title/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Fresh title/ }));
+    expect(screen.getByRole("heading", { level: 1, name: "Fresh title" })).toBeInTheDocument();
+  });
 });
 
 describe("notes", () => {
