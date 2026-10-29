@@ -1,6 +1,7 @@
 "use client";
 
 import { type Ref, useState } from "react";
+import { renameDocument } from "@/lib/documents";
 import { notePreview, type DocumentSource, type SavedDocument, clearDocuments } from "@/lib/documents";
 import { Modal } from "./Modal";
 
@@ -33,34 +34,57 @@ export interface RecentDocumentsProps {
   onClearAll?: () => void;
 }
 
-export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll }: RecentDocumentsProps) {
+export function RecentDocuments({
+  documents,
+  onOpen,
+  onDelete,
+  headingRef,
+  storage,
+  onClearAll,
+}: RecentDocumentsProps) {
   const [showClearModal, setShowClearModal] = useState(false);
-  
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editedTitle, setEditedTitle] = useState<string>("");
+
   const handleClearAll = () => {
     clearDocuments(storage);
     setShowClearModal(false);
-    // Call parent callback to update documents list
-    if (onClearAll) {
-      onClearAll();
-    }
+    if (onClearAll) onClearAll();
   };
-  
+
   const openClearModal = (event: React.MouseEvent) => {
     event.stopPropagation();
     setShowClearModal(true);
   };
-  
+
+  const startRename = (doc: SavedDocument) => {
+    setEditingId(doc.id);
+    setEditedTitle(doc.title);
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+  };
+
+  const saveRename = (doc: SavedDocument) => {
+    const trimmed = editedTitle.replace(/\s+/g, " ").trim();
+    if (!trimmed) {
+      setEditingId(null);
+      return;
+    }
+    renameDocument(doc.id, trimmed, storage);
+    setEditingId(null);
+  };
+
   return (
     <section aria-labelledby="recent-heading" className="space-y-4">
       <h2 id="recent-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
         Recent documents
       </h2>
       {documents.length === 0 ? (
-        <p className="text-lg text-muted">
-          Nothing here yet. Documents you read will appear here.
-        </p>
+        <p className="text-lg text-muted">Nothing here yet. Documents you read will appear here.</p>
       ) : (
-        <>
+        <> 
           <div className="flex justify-end">
             <button
               type="button"
@@ -73,38 +97,63 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef, stora
           <ul className="space-y-3">
             {documents.map((doc) => {
               const preview = notePreview(doc.note);
+              const isEditing = editingId === doc.id;
               return (
-              <li
-                key={doc.id}
-                className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2"
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpen(doc)}
-                  className="flex min-h-12 min-w-0 flex-1 flex-col items-start rounded-lg px-3 py-2 text-left text-lg"
+                <li
+                  key={doc.id}
+                  className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2"
                 >
-                  <span className="font-bold break-words">{doc.title}</span>{" "}
-                  <span className="text-base text-muted">
-                    {SOURCE_LABELS[doc.source]} · {formatDate(doc.updatedAt)}
-                  </span>
-                  {preview ? (
-                    <>
-                      {" "}
-                      <span data-testid="note-preview" className="text-base text-fg break-words">
-                        Note: {preview}
-                      </span>
-                    </>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Delete ${doc.title}`}
-                  onClick={() => onDelete(doc)}
-                  className="min-h-12 min-w-12 self-center rounded-lg border-2 border-fg px-4 text-lg"
-                >
-                  Delete
-                </button>
-              </li>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(doc)}
+                    className="flex min-h-12 min-w-0 flex-1 flex-col items-start rounded-lg px-3 py-2 text-left text-lg"
+                  >
+                    {isEditing ? (
+                      <label className="sr-only">Rename {doc.title}</label>
+                    ) : null}
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        autoFocus
+                        value={editedTitle}
+                        onChange={(e) => setEditedTitle(e.target.value)}
+                        onBlur={() => saveRename(doc)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveRename(doc);
+                          }
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelRename();
+                          }
+                        }}
+                        aria-label={`Rename ${doc.title}`}
+                        className="border-2 border-fg rounded-lg px-1 py-0.5"
+                      />
+                    ) : (
+                      <span className="font-bold break-words">{doc.title}</span>
+                    )}
+                    <span className="text-base text-muted">
+                      {SOURCE_LABELS[doc.source]} · {formatDate(doc.updatedAt)}
+                    </span>
+                    {preview ? (
+                      <>
+                        <span data-testid="note-preview" className="text-base text-fg break-words">
+                          Note: {preview}
+                        </span>
+                      </>
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${doc.title}`}
+                    onClick={() => onDelete(doc)}
+                    className="min-h-12 min-w-12 self-center rounded-lg border-2 border-fg px-4 text-lg"
+                  >
+                    Delete
+                  </button>
+                </li>
               );
             })}
           </ul>
@@ -114,9 +163,7 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef, stora
             title="Clear all documents?"
             returnFocusRef={undefined}
           >
-            <p className="mb-4">
-              Are you sure you want to delete all your documents? This action cannot be undone.
-            </p>
+            <p className="mb-4">Are you sure you want to delete all your documents? This action cannot be undone.</p>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
