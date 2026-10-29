@@ -87,6 +87,12 @@ export function listDocuments(storage?: Storage | null): SavedDocument[] {
   return sortNewestFirst(read(resolve(storage)));
 }
 
+function tidyTitle(title: string): string {
+  const clean = title.replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  return clean;
+}
+
 /**
  * Save a document. If a document with the same text exists it is updated
  * (title, source, updatedAt) instead of duplicated. At most 20 documents are
@@ -99,7 +105,31 @@ export function saveDocument(
   const store = resolve(storage);
   const docs = listDocuments(store);
   const now = Date.now();
-  const title = input.title?.trim() || deriveTitle(input.text);
+  
+  // Tidy the title: trim, collapse whitespace, and cut if too long
+  let title = input.title;
+  if (title) {
+    // Collapse whitespace and trim, then check if it's only whitespace 
+    const cleanTitle = tidyTitle(title);
+    if (!cleanTitle) {
+      // If title is only whitespace, fallback to derived title
+      title = deriveTitle(input.text);
+    } else {
+      // Check length and truncate like deriveTitle does
+      if (cleanTitle.length > TITLE_MAX_LENGTH) {
+        const slice = cleanTitle.slice(0, TITLE_MAX_LENGTH + 1);
+        const lastSpace = slice.lastIndexOf(" ");
+        const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : cleanTitle.slice(0, TITLE_MAX_LENGTH);
+        title = `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+      } else {
+        title = cleanTitle;
+      }
+    }
+  } else {
+    // If no title given at all, derive it
+    title = deriveTitle(input.text);
+  }
+  
   const existing = docs.find((d) => d.text === input.text);
   let doc: SavedDocument;
   if (existing) {

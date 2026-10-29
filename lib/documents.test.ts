@@ -359,3 +359,20 @@ describe("deriveTitle", () => {
     expect(title).toBe(`${"x".repeat(60)}…`);
   });
 });
+
+describe("saveDocument titles", () => {
+  it("tidies a given title before saving", () => {
+    expect(saveDocument({ title: "  My   doc  ", text: "a", source: "paste" }, storage).title).toBe("My doc");
+  });
+
+  it("falls back to the derived title when the given one is only whitespace", () => {
+    expect(saveDocument({ title: " \n\t ", text: "Hello world. More.", source: "paste" }, storage).title).toBe("Hello world.");
+  });
+
+  it("cuts a long given title the way deriveTitle cuts: at a word boundary, else 60 characters, then …", () => {
+    expect(saveDocument({ title: "x".repeat(70), text: "b", source: "paste" }, storage).title).toBe(`${"x".repeat(60)}…`);
+    const words = "word ".repeat(20);
+    expect(saveDocument({ title: words, text: "c", source: "paste" }, storage).title).toBe(deriveTitle(words));
+    expect(saveDocument({ title: "Dr. Who and the long title that goes on", text: "d", source: "paste" }, storage).title).toBe("Dr. Who and the long title that goes on");
+  });
+});
