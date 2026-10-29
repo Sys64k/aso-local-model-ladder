@@ -11,6 +11,7 @@ import {
   listDocuments,
   notePreview,
   saveDocument,
+  searchDocuments,
   updateNote,
   updateProgress,
 } from "./documents";
@@ -290,6 +291,150 @@ describe("document notes", () => {
       result = updateNote(a.id, "note", storage);
     }).not.toThrow();
     expect(result).toBeNull();
+  });
+});
+
+describe("searchDocuments", () => {
+  function ids(docs: { id: string }[]): string[] {
+    return docs.map((d) => d.id);
+  }
+
+  it("matches the title, ignoring case", () => {
+    const a = saveDocument({ title: "The Quick Fox", text: "nothing here", source: "paste" }, storage);
+    tick();
+    saveDocument({ title: "Other", text: "unrelated", source: "paste" }, storage);
+    expect(ids(searchDocuments("quick fox", storage))).toEqual([a.id]);
+    expect(ids(searchDocuments("QUICK", storage))).toEqual([a.id]);
+  });
+
+  it("matches the text, ignoring case", () => {
+    const a = saveDocument({ title: "Alpha", text: "The Lazy Dog sleeps.", source: "paste" }, storage);
+    tick();
+    saveDocument({ title: "Beta", text: "unrelated", source: "paste" }, storage);
+    expect(ids(searchDocuments("lazy DOG", storage))).toEqual([a.id]);
+  });
+
+  it("matches the note, ignoring case", () => {
+    const a = saveDocument({ title: "Alpha", text: "aaa", source: "paste" }, storage);
+    tick();
+    saveDocument({ title: "Beta", text: "bbb", source: "paste" }, storage);
+    tick();
+    updateNote(a.id, "Remember CHAPTER three", storage);
+    expect(ids(searchDocuments("chapter", storage))).toEqual([a.id]);
+  });
+
+  it("matches substrings inside words", () => {
+    const a = saveDocument({ title: "Foxglove", text: "aaa", source: "paste" }, storage);
+    expect(ids(searchDocuments("oxgl", storage))).toEqual([a.id]);
+  });
+
+  it("puts title matches before text and note matches, each group newest first", () => {
+    const textOld = saveDocument({ title: "One", text: "a banana split", source: "paste" }, storage);
+    tick();
+    const titleOld = saveDocument({ title: "Banana bread", text: "flour", source: "paste" }, storage);
+    tick();
+    const noteDoc = saveDocument({ title: "Two", text: "sugar", source: "paste" }, storage);
+    tick();
+    const textNew = saveDocument({ title: "Three", text: "BANANA milk", source: "paste" }, storage);
+    tick();
+    const titleNew = saveDocument({ title: "More bananas", text: "salt", source: "paste" }, storage);
+    tick();
+    saveDocument({ title: "Four", text: "apple", source: "paste" }, storage);
+    tick();
+    updateNote(noteDoc.id, "buy banana", storage); // now the most recently updated
+    tick();
+    const titleNewest = saveDocument({ title: "Last banana", text: "pepper", source: "paste" }, storage);
+
+    expect(ids(searchDocuments("banana", storage))).toEqual([
+      titleNewest.id,
+      titleNew.id,
+      titleOld.id,
+      noteDoc.id,
+      textNew.id,
+      textOld.id,
+    ]);
+  });
+
+  it("lists a document only once when it matches in several fields, in the title group", () => {
+    const both = saveDocument({ title: "Moon", text: "the moon is bright", source: "paste" }, storage);
+    updateNote(both.id, "moon note", storage);
+    tick();
+    const textOnly = saveDocument({ title: "Night", text: "full moon", source: "paste" }, storage);
+    const result = searchDocuments("moon", storage);
+    expect(ids(result)).toEqual([both.id, textOnly.id]);
+  });
+
+  it("returns whole documents", () => {
+    const a = saveDocument({ title: "Alpha", text: "aaa", source: "file" }, storage);
+    const updated = updateNote(a.id, "n", storage);
+    expect(searchDocuments("alpha", storage)).toEqual([updated]);
+  });
+
+  it("returns every document, newest first, for an empty query", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    tick();
+    const b = saveDocument({ title: "B", text: "b", source: "paste" }, storage);
+    tick();
+    const c = saveDocument({ title: "C", text: "c", source: "paste" }, storage);
+    expect(ids(searchDocuments("", storage))).toEqual([c.id, b.id, a.id]);
+    expect(searchDocuments("", storage)).toEqual(listDocuments(storage));
+  });
+
+  it("returns every document for a whitespace-only query", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    tick();
+    const b = saveDocument({ title: "B", text: "b", source: "paste" }, storage);
+    expect(ids(searchDocuments("   ", storage))).toEqual([b.id, a.id]);
+    expect(ids(searchDocuments(" \n\t ", storage))).toEqual([b.id, a.id]);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    saveDocument({ title: "Alpha", text: "aaa", source: "paste" }, storage);
+    saveDocument({ title: "Beta", text: "bbb", source: "paste" }, storage);
+    expect(searchDocuments("zebra", storage)).toEqual([]);
+  });
+
+  it("returns an empty list when there are no documents", () => {
+    expect(searchDocuments("", storage)).toEqual([]);
+    expect(searchDocuments("anything", storage)).toEqual([]);
+  });
+
+  it("treats the query literally, not as a pattern", () => {
+    const dotted = saveDocument({ title: "v1.2 notes", text: "aaa", source: "paste" }, storage);
+    tick();
+    saveDocument({ title: "v1x2 notes", text: "bbb", source: "paste" }, storage);
+    tick();
+    const paren = saveDocument({ title: "Plain", text: "call f(x) here", source: "paste" }, storage);
+    expect(ids(searchDocuments("1.2", storage))).toEqual([dotted.id]);
+    expect(ids(searchDocuments("f(x", storage))).toEqual([paren.id]);
+    expect(() => searchDocuments("[(*", storage)).not.toThrow();
+    expect(searchDocuments("[(*", storage)).toEqual([]);
+  });
+
+  it("finds old stored documents that have no note", () => {
+    storage.setItem(
+      DOCUMENTS_STORAGE_KEY,
+      JSON.stringify([
+        { id: "old", title: "Old doc", text: "legacy text", source: "paste", createdAt: 1, updatedAt: 2, lastSentenceIndex: 0 },
+      ]),
+    );
+    expect(ids(searchDocuments("legacy", storage))).toEqual(["old"]);
+    expect(searchDocuments("nothing", storage)).toEqual([]);
+  });
+
+  it("does not write to storage", () => {
+    saveDocument({ title: "Alpha", text: "aaa", source: "paste" }, storage);
+    const writes = storage.writes;
+    searchDocuments("alpha", storage);
+    searchDocuments("", storage);
+    expect(storage.writes).toBe(writes);
+  });
+
+  it("never throws when reads fail", () => {
+    saveDocument({ title: "Alpha", text: "aaa", source: "paste" }, storage);
+    storage.failReads = true;
+    expect(() => searchDocuments("alpha", storage)).not.toThrow();
+    expect(searchDocuments("alpha", storage)).toEqual([]);
   });
 });
 
