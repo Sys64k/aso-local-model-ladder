@@ -100,38 +100,29 @@ export function importBackup(json: string, storage?: Storage | null): void {
   // Merge all documents - imported ones overwrite existing ones with same ID
   const existingDocuments = listDocuments(store);
   
-  // Create a map of imported documents by ID for fast lookup
-  const importedDocMap = new Map<string, SavedDocument>();
-  for (const doc of documents) {
-    importedDocMap.set(doc.id, doc);
-  }
+  const docMap = new Map<string, SavedDocument>();
   
-  // Collect final set of documents
-  const finalDocs: SavedDocument[] = [];
-  
-  // First, add all documents from backup - these take precedence
-  for (const doc of documents) {
-    finalDocs.push(doc);
-  }
-  
-  // Then add existing docs that don't exist in the import
+  // Add existing docs first (lower priority)
   for (const existingDoc of existingDocuments) {
-    if (!importedDocMap.has(existingDoc.id)) {
-      finalDocs.push(existingDoc);
-    }
+    docMap.set(existingDoc.id, existingDoc);
   }
   
-  // Sort by update time (newest first) 
-  const sorted = finalDocs.sort((a, b) => b.updatedAt - a.updatedAt);
+  // Then add imported docs (higher priority) - they override existing ones if same ID
+  for (const importedDoc of documents) {
+    docMap.set(importedDoc.id, importedDoc);
+  }
   
-  // Apply MAX_DOCUMENTS limit 
+  // Convert to array and sort newest first by updatedAt
+  const allMergedDocs = Array.from(docMap.values());
+  const sorted = allMergedDocs.sort((a, b) => b.updatedAt - a.updatedAt);
+  
+  // Limit to MAX_DOCUMENTS 
   const cappedDocuments = sorted.slice(0, MAX_DOCUMENTS);
   
   // Save everything
   try {
     saveSettings(settings, store);
-    
-    // Write documents manually to avoid conflicts with existing save logic
+    // Write documents manually to avoid conflicts with existing logic
     if (store) {
       store.setItem("readaloud:documents:v1", JSON.stringify(cappedDocuments));
     }
