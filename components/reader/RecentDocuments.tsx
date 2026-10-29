@@ -1,7 +1,7 @@
 "use client";
 
-import { type Ref, useState } from "react";
-import { notePreview, type DocumentSource, type SavedDocument, clearDocuments } from "@/lib/documents";
+import { type Ref, useState, useRef } from "react";
+import { notePreview, type DocumentSource, type SavedDocument, renameDocument, clearDocuments } from "@/lib/documents";
 import { Modal } from "./Modal";
 
 export const SOURCE_LABELS: Record<DocumentSource, string> = {
@@ -31,10 +31,34 @@ export interface RecentDocumentsProps {
   headingRef?: Ref<HTMLHeadingElement>;
   storage?: Storage | null;
   onClearAll?: () => void;
+  onRename?: (doc: SavedDocument) => void;
 }
 
-export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll }: RecentDocumentsProps) {
-  const [showClearModal, setShowClearModal] = useState(false);
+export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll, onRename }: RecentDocumentsProps) {
+  const [editId, setEditId] = useState<string | null>(null);
+const [editTitle, setEditTitle] = useState<string>('');
+const preventBlurRef = useRef(false);
+
+function commitSave() {
+  if (!editId) return;
+  const newTitle = editTitle.trim();
+  if (!newTitle) {
+    cancelEdit();
+    return;
+  }
+  const updated = renameDocument(editId, newTitle, storage);
+  if (updated) {
+    onRename?.(updated);
+  }
+  cancelEdit();
+}
+
+function cancelEdit() {
+  setEditId(null);
+  setEditTitle('');
+  preventBlurRef.current = false;
+}
+
   
   const handleClearAll = () => {
     clearDocuments(storage);
