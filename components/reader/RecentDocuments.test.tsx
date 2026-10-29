@@ -87,3 +87,49 @@ describe("RecentDocuments note preview", () => {
     expect(onDelete).toHaveBeenCalledWith(doc);
   });
 });
+
+describe("RecentDocuments clear all functionality", () => {
+  it("hides the clear all button when there are no documents", () => {
+    renderList([]);
+    expect(screen.queryByRole("button", { name: "Clear all" })).not.toBeInTheDocument();
+  });
+
+  it("shows the clear all button when there are documents", () => {
+    renderList([makeDoc()]);
+    expect(screen.getByRole("button", { name: "Clear all" })).toBeInTheDocument();
+  });
+
+  it("opens confirmation modal when clear all is clicked", async () => {
+    const user = userEvent.setup();
+    renderList([makeDoc()]);
+    
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    
+    expect(screen.getByRole("dialog", { name: "Clear all documents?" })).toBeInTheDocument();
+  });
+
+  it("closes modal when Cancel is clicked", async () => {
+    const user = userEvent.setup();
+    renderList([makeDoc()]);
+    
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    
+    expect(screen.queryByRole("dialog", { name: "Clear all documents?" })).not.toBeInTheDocument();
+  });
+
+  it("clears all documents when Clear all is clicked in confirmation", async () => {
+    const user = userEvent.setup();
+    renderList([makeDoc({ id: "doc1" }), makeDoc({ id: "doc2" })]);
+    
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(screen.getByRole("dialog", { name: "Clear all documents?" })).toBeInTheDocument();
+    
+    // Use a more specific selector for the confirmation button
+    const clearAllButton = screen.getAllByRole("button", { name: "Clear all" })[1];  // The second one inside the dialog
+    await user.click(clearAllButton);
+    
+    // Check that the modal is closed
+    expect(screen.queryByRole("dialog", { name: "Clear all documents?" })).not.toBeInTheDocument();
+  });
+});

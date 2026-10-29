@@ -190,6 +190,12 @@ export function deleteDocument(id: string, storage?: Storage | null): void {
   if (rest.length !== docs.length) write(store, rest);
 }
 
+/** Remove all saved documents. */
+export function clearDocuments(storage?: Storage | null): void {
+  const store = resolve(storage);
+  write(store, []);
+}
+
 /** First ~60 chars of the first sentence, cut at a word boundary, with an ellipsis. */
 export function deriveTitle(text: string): string {
   const clean = (text ?? "").replace(/\s+/g, " ").trim();
