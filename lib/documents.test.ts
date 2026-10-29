@@ -5,11 +5,13 @@ import {
   MAX_DOCUMENTS,
   NOTE_MAX_LENGTH,
   NOTE_PREVIEW_LENGTH,
+  TITLE_MAX_LENGTH,
   deleteDocument,
   deriveTitle,
   getDocument,
   listDocuments,
   notePreview,
+  renameDocument,
   saveDocument,
   searchDocuments,
   updateNote,
@@ -519,5 +521,95 @@ describe("saveDocument titles", () => {
     const words = "word ".repeat(20);
     expect(saveDocument({ title: words, text: "c", source: "paste" }, storage).title).toBe(deriveTitle(words));
     expect(saveDocument({ title: "Dr. Who and the long title that goes on", text: "d", source: "paste" }, storage).title).toBe("Dr. Who and the long title that goes on");
+  });
+});
+
+describe("renameDocument", () => {
+  it("renames a document, returns the updated doc and persists it", () => {
+    const a = saveDocument({ title: "Old name", text: "Some text. More.", source: "file" }, storage);
+    updateProgress(a.id, 1, storage);
+    updateNote(a.id, "keep me", storage);
+    const before = getDocument(a.id, storage)!;
+    tick();
+    const updated = renameDocument(a.id, "New name", storage);
+    expect(updated).not.toBeNull();
+    expect(updated).toMatchObject({
+      id: a.id,
+      title: "New name",
+      text: before.text,
+      source: before.source,
+      createdAt: before.createdAt,
+      lastSentenceIndex: 1,
+      note: "keep me",
+    });
+    expect(getDocument(a.id, storage)).toEqual(updated);
+    expect(listDocuments(storage)).toHaveLength(1);
+    expect(storage.getItem(DOCUMENTS_STORAGE_KEY)).toContain("New name");
+    expect(storage.getItem(DOCUMENTS_STORAGE_KEY)).not.toContain("Old name");
+  });
+
+  it("only renames the given document", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    tick();
+    const b = saveDocument({ title: "B", text: "b", source: "paste" }, storage);
+    renameDocument(a.id, "A renamed", storage);
+    expect(getDocument(a.id, storage)?.title).toBe("A renamed");
+    expect(getDocument(b.id, storage)?.title).toBe("B");
+    expect(listDocuments(storage)).toHaveLength(2);
+  });
+
+  it("trims the title (and collapses whitespace like saveDocument)", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    expect(renameDocument(a.id, "   New name  ", storage)?.title).toBe("New name");
+    expect(getDocument(a.id, storage)?.title).toBe("New name");
+    expect(renameDocument(a.id, "  My   new\tdoc ", storage)?.title).toBe("My new doc");
+  });
+
+  it("does not save an empty or whitespace-only title", () => {
+    const a = saveDocument({ title: "Keep me", text: "a", source: "paste" }, storage);
+    for (const title of ["", "   ", " \n\t "]) {
+      const writes = storage.writes;
+      expect(renameDocument(a.id, title, storage)).toBeNull();
+      expect(storage.writes).toBe(writes);
+      expect(getDocument(a.id, storage)?.title).toBe("Keep me");
+    }
+  });
+
+  it("keeps a title of exactly TITLE_MAX_LENGTH characters unchanged", () => {
+    expect(TITLE_MAX_LENGTH).toBe(60);
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    const exact = "y".repeat(TITLE_MAX_LENGTH);
+    expect(renameDocument(a.id, exact, storage)?.title).toBe(exact);
+    expect(getDocument(a.id, storage)?.title).toBe(exact);
+  });
+
+  it("cuts a long title the way saveDocument does: word boundary, else 60 characters, then …", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    expect(renameDocument(a.id, "x".repeat(TITLE_MAX_LENGTH + 1), storage)?.title).toBe(
+      `${"x".repeat(TITLE_MAX_LENGTH)}…`,
+    );
+    expect(getDocument(a.id, storage)?.title).toBe(`${"x".repeat(TITLE_MAX_LENGTH)}…`);
+    const words = "word ".repeat(20);
+    const title = renameDocument(a.id, words, storage)?.title ?? "";
+    expect(title).toBe(deriveTitle(words));
+    expect(title.endsWith("…")).toBe(true);
+    expect(title.length).toBeLessThanOrEqual(TITLE_MAX_LENGTH + 1);
+  });
+
+  it("returns null for unknown ids and does not write", () => {
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    const writes = storage.writes;
+    expect(renameDocument("missing", "New", storage)).toBeNull();
+    expect(storage.writes).toBe(writes);
+    expect(listDocuments(storage).map((d) => d.title)).toEqual(["A"]);
+  });
+
+  it("never throws when storage fails", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    storage.failWrites = true;
+    expect(() => renameDocument(a.id, "B", storage)).not.toThrow();
+    storage.failReads = true;
+    expect(() => renameDocument(a.id, "C", storage)).not.toThrow();
+    expect(renameDocument(a.id, "C", storage)).toBeNull();
   });
 });
