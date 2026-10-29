@@ -1,7 +1,7 @@
 "use client";
 
-import { type Ref, useState } from "react";
-import { notePreview, type DocumentSource, type SavedDocument, clearDocuments } from "@/lib/documents";
+import { type Ref, useEffect, useState, useRef } from "react";
+import { notePreview, renameDocument, type DocumentSource, type SavedDocument, clearDocuments } from "@/lib/documents";
 import { Modal } from "./Modal";
 
 export const SOURCE_LABELS: Record<DocumentSource, string> = {
@@ -30,11 +30,33 @@ export interface RecentDocumentsProps {
   onDelete: (doc: SavedDocument) => void;
   headingRef?: Ref<HTMLHeadingElement>;
   storage?: Storage | null;
-  onClearAll?: () => void;
+  onRename?: (doc: SavedDocument) => void;
 }
 
 export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll }: RecentDocumentsProps) {
   const [showClearModal, setShowClearModal] = useState(false);
+const [renamingId, setRenamingId] = useState<string | null>(null);
+const [renamingTitle, setRenamingTitle] = useState<string>('');
+const renameInputRef = useRef<HTMLInputElement>(null);
+
+const startRename = (doc: SavedDocument) => {
+  setRenamingId(doc.id);
+  setRenamingTitle(doc.title);
+};
+
+const finishRename = (save: boolean) => {
+  const id = renamingId;
+  const title = renamingTitle;
+  setRenamingId(null);
+  setRenamingTitle('');
+  if (!id) return;
+  if (!save) return; // cancelled
+  const trimmed = title.replace(/\s+/g, " ").trim();
+  if (!trimmed) return;
+  const updated = renameDocument(id, trimmed, storage);
+  if (updated && onRename) onRename(updated);
+};
+
   
   const handleClearAll = () => {
     clearDocuments(storage);
