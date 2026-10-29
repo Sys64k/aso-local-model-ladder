@@ -34,7 +34,7 @@ export interface RecentDocumentsProps {
   onClearAll?: () => void;
 }
 
-export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll }: RecentDocumentsProps) {
+export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll, onRename }: RecentDocumentsProps) {
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [editingValue, setEditingValue] = useState<string>("");
