@@ -38,9 +38,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
+    "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "screenshots": "echo \"no screenshots\""
+    "test:e2e": "playwright test"
   }
 }
