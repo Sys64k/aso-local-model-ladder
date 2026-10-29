@@ -27,7 +27,7 @@ export interface SegmentOptions {
 }
 
 // Control characters except \t \n \r (those are handled separately).
-const CONTROL_CHARS = /[\u0000-\u0008\u000E-\u001F\u007F-\u009F\uFEFF]/g;
+const CONTROL_CHARS = /[\u0000-\u0008\u000E-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g;
 
 /**
  * Clean up pasted / OCR / PDF text:
