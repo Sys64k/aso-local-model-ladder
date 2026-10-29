@@ -110,7 +110,14 @@ export function saveDocument(
   if (title.length > TITLE_MAX_LENGTH) {
     const slice = title.slice(0, TITLE_MAX_LENGTH + 1);
     const lastSpace = slice.lastIndexOf(" ");
-    const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : title.slice(0, TITLE_MAX_LENGTH);
+    let cut;
+    if (lastSpace > 0) {
+      cut = slice.slice(0, lastSpace);
+    } else {
+      // If no space found in the slice or if it's at position 0,
+      // hard-trim to TITLE_MAX_LENGTH
+      cut = title.slice(0, TITLE_MAX_LENGTH);
+    }
     title = `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
   }
   

@@ -394,4 +394,60 @@ describe("saveDocument title tidying", () => {
     // Should derive from the text and collapse multiple spaces
     expect(doc.title).toBe("Hello world test text.");
   });
+
+  it("handles titles that are very long without spaces", () => {
+    // A title with a single word longer than TITLE_MAX_LENGTH (60 characters)
+    const longWord = "x".repeat(70); // 70 chars, longer than 60
+    const doc = saveDocument({ 
+      title: longWord, 
+      text: "Hello world.", 
+      source: "paste" 
+    }, storage);
+    // Should be truncated properly to TITLE_MAX_LENGTH (60) with ellipsis
+    expect(doc.title.length).toBeLessThanOrEqual(61); // 60 chars + 1 for ellipsis = 61 max
+    expect(doc.title.endsWith("…")).toBe(true);
+    // Make sure there's no over-truncation where title length exceeds TITLE_MAX_LENGTH by one
+    const titleLengthWithoutEllipsis = doc.title.slice(0, -1).length;
+    expect(titleLengthWithoutEllipsis).toBeLessThanOrEqual(60); 
+  });
+
+  it("respects exact TITLE_MAX_LENGTH when no truncation needed", () => {
+    // Test a title that is exactly the length - should not add ellipsis if not needed
+    const exactTitle = "x".repeat(59); // 59 chars, shorter than limit
+    const doc = saveDocument({ 
+      title: exactTitle, 
+      text: "Hello world.", 
+      source: "paste" 
+    }, storage);
+    expect(doc.title.length).toBe(59);
+    expect(doc.title.endsWith("…")).toBe(false); // No ellipsis needed
+  });
+
+  it("handles edge case with title that's exactly TITLE_MAX_LENGTH", () => {
+    // Test exact boundary - very important for this requirement
+    const exactlyTitle = "x".repeat(60); // 60 chars exactly 
+    const doc = saveDocument({ 
+      title: exactlyTitle, 
+      text: "Hello world.", 
+      source: "paste" 
+    }, storage);
+    expect(doc.title.length).toBe(60);
+    expect(doc.title.endsWith("…")).toBe(false); // No ellipsis needed
+  });
+
+  it("handles exact boundary when space exists near edge", () => {
+    // Make a title that ends at exactly TITLE_MAX_LENGTH - ensure no overflow
+    const title = "a ".repeat(30) + "b"; // 61 chars: 30 pairs of "a " + one more "b" = 60 spaces + 1 char
+    expect(title.length).toBe(61);  
+
+    const doc = saveDocument({ 
+      title, 
+      text: "Hello world.", 
+      source: "paste" 
+    }, storage);
+    
+    // With this case, even though we have 61 chars and a space at the boundary,
+    // The truncation should not go over TITLE_MAX_LENGTH
+    expect(doc.title.length).toBeLessThanOrEqual(61); // 60 content + 1 ellipsis = max
+  });
 });
