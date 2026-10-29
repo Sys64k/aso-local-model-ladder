@@ -220,6 +220,40 @@ export function deleteDocument(id: string, storage?: Storage | null): void {
   if (rest.length !== docs.length) write(store, rest);
 }
 
++/** Rename the title of a document. Trims whitespace, collapses, truncates to TITLE_MAX_LENGTH, and ignores empty titles. UpdatedAt is updated. */
++export function renameDocument(id: string, newTitle: string, storage?: Storage | null): void {
++  const store = resolve(storage);
++  const docs = read(store);
++  const docIndex = docs.findIndex((d) => d.id === id);
++  if (docIndex === -1) return;
++  const oldTitle = docs[docIndex].title;
++  const cleaned = tidyTitle(newTitle);
++  if (!cleaned) {
++    // Ignore empty title
++    return;
++  }
++  let trimmed = cleaned;
++  if (trimmed.length > TITLE_MAX_LENGTH) {
++    const slice = trimmed.slice(0, TITLE_MAX_LENGTH + 1);
++    const lastSpace = slice.lastIndexOf(" ");
++    const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : trimmed.slice(0, TITLE_MAX_LENGTH);
++    trimmed = `${cut.replace(/[\s,;:\-–—]+$/g, "")}…`;
++  }
++  const updated: SavedDocument = {
++    ...docs[docIndex],
++    title: trimmed,
++    updatedAt: Date.now(),
++  };
++  docs[docIndex] = updated;
++  write(store, sortNewestFirst(docs));
++}
+*** End Patch
+  const store = resolve(storage);
+  const docs = read(store);
+  const rest = docs.filter((d) => d.id !== id);
+  if (rest.length !== docs.length) write(store, rest);
+}
+
 /** Remove all saved documents. */
 export function clearDocuments(storage?: Storage | null): void {
   const store = resolve(storage);
