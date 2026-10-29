@@ -11,6 +11,7 @@ import {
   listDocuments,
   notePreview,
   saveDocument,
+  searchDocuments,
   updateNote,
   updateProgress,
 } from "./documents";
@@ -290,6 +291,148 @@ describe("document notes", () => {
       result = updateNote(a.id, "note", storage);
     }).not.toThrow();
     expect(result).toBeNull();
+  });
+});
+
+describe("searchDocuments", () => {
+  /** Saves documents oldest first (each one tick newer), optionally with a note. */
+  function seed(entries: { title: string; text: string; note?: string }[]) {
+    return entries.map((e) => {
+      tick();
+      const doc = saveDocument({ title: e.title, text: e.text, source: "paste" }, storage);
+      if (e.note !== undefined) return updateNote(doc.id, e.note, storage)!;
+      return doc;
+    });
+  }
+
+  it("matches the title, ignoring case", () => {
+    const [a] = seed([
+      { title: "Moby Dick", text: "Call me Ishmael." },
+      { title: "Other", text: "Nothing here." },
+    ]);
+    expect(searchDocuments("moby", storage).map((d) => d.id)).toEqual([a.id]);
+    expect(searchDocuments("MOBY DICK", storage).map((d) => d.id)).toEqual([a.id]);
+    expect(searchDocuments("bY d", storage).map((d) => d.id)).toEqual([a.id]);
+  });
+
+  it("matches the text, ignoring case", () => {
+    const [a] = seed([
+      { title: "First", text: "Call me Ishmael." },
+      { title: "Second", text: "Nothing here." },
+    ]);
+    expect(searchDocuments("ishmael", storage).map((d) => d.id)).toEqual([a.id]);
+    expect(searchDocuments("CALL ME", storage).map((d) => d.id)).toEqual([a.id]);
+  });
+
+  it("matches the note, ignoring case", () => {
+    const [, b] = seed([
+      { title: "First", text: "alpha", note: "nothing special" },
+      { title: "Second", text: "beta", note: "Read Chapter Three again" },
+    ]);
+    expect(searchDocuments("chapter three", storage).map((d) => d.id)).toEqual([b.id]);
+    expect(searchDocuments("AGAIN", storage).map((d) => d.id)).toEqual([b.id]);
+  });
+
+  it("returns full SavedDocument objects", () => {
+    const [a] = seed([{ title: "Whale", text: "Call me Ishmael.", note: "a note" }]);
+    expect(searchDocuments("whale", storage)).toEqual([getDocument(a.id, storage)]);
+  });
+
+  it("puts title matches before text and note matches", () => {
+    // Saved oldest -> newest: titleOld, textMatch, titleNew, noteMatch
+    const [titleOld, textMatch, titleNew, noteMatch] = seed([
+      { title: "Ocean notes", text: "plain" },
+      { title: "Plain", text: "the ocean is wide" },
+      { title: "OCEAN tides", text: "waves" },
+      { title: "Misc", text: "misc", note: "about the Ocean" },
+    ]);
+    seed([{ title: "Unrelated", text: "nothing" }]);
+    expect(searchDocuments("ocean", storage).map((d) => d.id)).toEqual([
+      titleNew.id,
+      titleOld.id,
+      noteMatch.id,
+      textMatch.id,
+    ]);
+  });
+
+  it("orders each group newest first by updatedAt, not by creation", () => {
+    const [titleA, titleB, textA, textB] = seed([
+      { title: "Key one", text: "x1" },
+      { title: "Key two", text: "x2" },
+      { title: "T1", text: "has key inside" },
+      { title: "T2", text: "also key inside" },
+    ]);
+    tick();
+    updateProgress(titleA.id, 2, storage);
+    tick();
+    updateProgress(textA.id, 1, storage);
+    expect(searchDocuments("key", storage).map((d) => d.id)).toEqual([
+      titleA.id,
+      titleB.id,
+      textA.id,
+      textB.id,
+    ]);
+  });
+
+  it("lists a document matching both title and text once, in the title group", () => {
+    const [both, textOnly] = seed([
+      { title: "Rain", text: "rain falls", note: "rain again" },
+      { title: "Weather", text: "rain today" },
+    ]);
+    const ids = searchDocuments("rain", storage).map((d) => d.id);
+    expect(ids).toEqual([both.id, textOnly.id]);
+  });
+
+  it("returns every document, newest first, for an empty or whitespace query", () => {
+    const docs = seed([
+      { title: "A", text: "a" },
+      { title: "B", text: "b" },
+      { title: "C", text: "c", note: "n" },
+    ]);
+    const expected = listDocuments(storage);
+    expect(expected.map((d) => d.id)).toEqual([docs[2].id, docs[1].id, docs[0].id]);
+    expect(searchDocuments("", storage)).toEqual(expected);
+    expect(searchDocuments("   ", storage)).toEqual(expected);
+    expect(searchDocuments(" \n\t ", storage)).toEqual(expected);
+  });
+
+  it("returns an empty list when nothing matches", () => {
+    seed([
+      { title: "A", text: "alpha", note: "first" },
+      { title: "B", text: "beta" },
+    ]);
+    expect(searchDocuments("zebra", storage)).toEqual([]);
+  });
+
+  it("returns an empty list when there are no documents", () => {
+    expect(searchDocuments("anything", storage)).toEqual([]);
+    expect(searchDocuments("", storage)).toEqual([]);
+  });
+
+  it("treats regex special characters literally", () => {
+    const [cpp, paren] = seed([
+      { title: "C++ primer", text: "templates" },
+      { title: "Math", text: "f(x) = y" },
+      { title: "Cxx", text: "nope" },
+    ]);
+    expect(searchDocuments("c++", storage).map((d) => d.id)).toEqual([cpp.id]);
+    expect(searchDocuments("f(x", storage).map((d) => d.id)).toEqual([paren.id]);
+    expect(searchDocuments(".*", storage)).toEqual([]);
+  });
+
+  it("does not write to storage", () => {
+    seed([{ title: "A", text: "alpha" }]);
+    const writes = storage.writes;
+    searchDocuments("alpha", storage);
+    searchDocuments("", storage);
+    expect(storage.writes).toBe(writes);
+  });
+
+  it("never throws when reads fail", () => {
+    seed([{ title: "A", text: "alpha" }]);
+    storage.failReads = true;
+    expect(searchDocuments("alpha", storage)).toEqual([]);
+    expect(searchDocuments("", storage)).toEqual([]);
   });
 });
 
