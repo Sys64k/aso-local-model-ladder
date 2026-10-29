@@ -196,6 +196,14 @@ export function clearDocuments(storage?: Storage | null): void {
   write(store, []);
 }
 
+/** Remove all saved documents and return the list of deleted documents. */
+export function clearDocumentsAndReturn(storage?: Storage | null): SavedDocument[] {
+  const store = resolve(storage);
+  const docs = read(store);
+  write(store, []);
+  return docs;
+}
+
 /** First ~60 chars of the first sentence, cut at a word boundary, with an ellipsis. */
 export function deriveTitle(text: string): string {
   const clean = (text ?? "").replace(/\s+/g, " ").trim();

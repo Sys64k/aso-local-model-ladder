@@ -29,14 +29,20 @@ export interface RecentDocumentsProps {
   onOpen: (doc: SavedDocument) => void;
   onDelete: (doc: SavedDocument) => void;
   headingRef?: Ref<HTMLHeadingElement>;
+  storage?: Storage | null;
+  onClearAll?: () => void;
 }
 
-export function RecentDocuments({ documents, onOpen, onDelete, headingRef }: RecentDocumentsProps) {
+export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll }: RecentDocumentsProps) {
   const [showClearModal, setShowClearModal] = useState(false);
   
   const handleClearAll = () => {
-    clearDocuments();
+    clearDocuments(storage);
     setShowClearModal(false);
+    // Call parent callback to update documents list
+    if (onClearAll) {
+      onClearAll();
+    }
   };
   
   const openClearModal = (event: React.MouseEvent) => {
