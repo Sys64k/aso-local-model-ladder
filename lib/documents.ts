@@ -115,10 +115,17 @@ export function saveDocument(
       cut = slice.slice(0, lastSpace);
     } else {
       // If no space found in the slice or if it's at position 0,
-      // hard-trim to TITLE_MAX_LENGTH
-      cut = title.slice(0, TITLE_MAX_LENGTH);
+      // hard-trim to TITLE_MAX_LENGTH - 1 to accommodate the ellipsis
+      cut = title.slice(0, TITLE_MAX_LENGTH - 1);
     }
-    title = `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+    // Ensure the final truncated title doesn't exceed TITLE_MAX_LENGTH (including ellipsis)
+    const finalCut = cut.replace(/[\s,;:.\-–—]+$/, "");
+    if (finalCut.length > TITLE_MAX_LENGTH) {
+      // This shouldn't happen with our current logic, but let's make sure
+      title = `${finalCut.slice(0, TITLE_MAX_LENGTH)}…`;
+    } else {
+      title = `${finalCut}…`;
+    }
   }
   
   const existing = docs.find((d) => d.text === input.text);
