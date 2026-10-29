@@ -68,63 +68,64 @@ export function importBackup(json: string, storage?: Storage | null): void {
     throw new Error("Invalid backup data: documents must be an array");
   }
   
-  // Validate settings (it's ok for it to be null/undefined)
-  
-  // Process documents - validate and parse individual documents
-  let documents: SavedDocument[] = [];
-  for (const doc of data.documents) {
-    if (doc && typeof doc === "object" &&
-        typeof doc.id === "string" &&
-        typeof doc.title === "string" &&
-        typeof doc.text === "string" &&
-        typeof doc.source === "string" &&
-        ['paste', 'file', 'pdf', 'image', 'url'].includes(doc.source) &&
-        typeof doc.createdAt === "number" &&
-        typeof doc.updatedAt === "number" &&
-        typeof doc.lastSentenceIndex === "number" &&
-        typeof doc.note === "string") {
-      documents.push(doc as SavedDocument);
-    }
-  }
-  
   // Process settings
   let settings: ReaderSettings;
   if (data.settings && typeof data.settings === "object") {
-    // Use sanitizeSettings to properly clean up settings 
     settings = sanitizeSettings(data.settings);
   } else {
-    // Load the current settings if nothing was provided in backup
     settings = loadSettings(store);
   }
   
-  // Merge all documents - imported ones overwrite existing ones with same ID
+  // Get existing documents
   const existingDocuments = listDocuments(store);
   
-  const docMap = new Map<string, SavedDocument>();
+  // Build merged document set correctly:
+  // 1. Import all documents from backup (existing ones will be replaced)
+  // 2. Add back existing documents that were not in backup
+  // 3. Sort and limit properly
   
-  // Add existing docs first (lower priority)
+  const idToDocMap: Map<string, SavedDocument> = new Map();
+  
+  // Process imported docs first (they take precedence)
+  for (const importedDoc of data.documents) {
+    if (importedDoc && typeof importedDoc === "object" &&
+        typeof importedDoc.id === "string" &&
+        typeof importedDoc.title === "string" &&
+        typeof importedDoc.text === "string" &&
+        typeof importedDoc.source === "string" &&
+        ['paste', 'file', 'pdf', 'image', 'url'].includes(importedDoc.source) &&
+        typeof importedDoc.createdAt === "number" &&
+        typeof importedDoc.updatedAt === "number" &&
+        typeof importedDoc.lastSentenceIndex === "number" &&
+        typeof importedDoc.note === "string") {
+      
+      idToDocMap.set(importedDoc.id, importedDoc);
+    }
+  }
+  
+  // Process existing docs - only if not in imported (they get overwritten by import)
   for (const existingDoc of existingDocuments) {
-    docMap.set(existingDoc.id, existingDoc);
+    if (!idToDocMap.has(existingDoc.id)) {
+      idToDocMap.set(existingDoc.id, existingDoc); 
+    }
   }
   
-  // Then add imported docs (higher priority) - they override existing ones if same ID
-  for (const importedDoc of documents) {
-    docMap.set(importedDoc.id, importedDoc);
+  // Convert back to array and sort by updatedAt
+  let docsArray = Array.from(idToDocMap.values());
+  docsArray.sort((a, b) => b.updatedAt - a.updatedAt);
+  
+  // Enforce MAX_DOCUMENTS limit
+  if (docsArray.length > MAX_DOCUMENTS) {
+    docsArray = docsArray.slice(0, MAX_DOCUMENTS);
   }
   
-  // Convert to array and sort newest first by updatedAt
-  const allMergedDocs = Array.from(docMap.values());
-  const sorted = allMergedDocs.sort((a, b) => b.updatedAt - a.updatedAt);
-  
-  // Limit to MAX_DOCUMENTS 
-  const cappedDocuments = sorted.slice(0, MAX_DOCUMENTS);
-  
-  // Save everything
+  // Final save
   try {
     saveSettings(settings, store);
-    // Write documents manually to avoid conflicts with existing logic
+    
+    const storageKey = "readaloud:documents:v1";
     if (store) {
-      store.setItem("readaloud:documents:v1", JSON.stringify(cappedDocuments));
+      store.setItem(storageKey, JSON.stringify(docsArray));
     }
   } catch (e) {
     throw new Error("Failed to restore backup: " + (e as Error).message);
