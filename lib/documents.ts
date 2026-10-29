@@ -13,7 +13,6 @@ export interface SavedDocument {
   lastSentenceIndex: number;
   /** Free-text note. Older stored documents without a note read as "". */
   note: string;
-}
 
 export const DOCUMENTS_STORAGE_KEY = "readaloud:documents:v1";
 export const MAX_DOCUMENTS = 20;
@@ -37,12 +36,10 @@ function isDocument(v: unknown): v is Omit<SavedDocument, "note"> & { note?: unk
     typeof d.updatedAt === "number" &&
     typeof d.lastSentenceIndex === "number"
   );
-}
 
 function sortNewestFirst(docs: SavedDocument[]): SavedDocument[] {
   // Array#sort is stable, so equal timestamps keep their stored order.
   return docs.slice().sort((a, b) => b.updatedAt - a.updatedAt);
-}
 
 function read(storage: Storage | null): SavedDocument[] {
   if (!storage) return [];
@@ -57,7 +54,6 @@ function read(storage: Storage | null): SavedDocument[] {
   } catch {
     return [];
   }
-}
 
 function write(storage: Storage | null, docs: SavedDocument[]): void {
   if (!storage) return;
@@ -66,11 +62,9 @@ function write(storage: Storage | null, docs: SavedDocument[]): void {
   } catch {
     // Quota exceeded / private mode: keep going without persistence.
   }
-}
 
 function resolve(storage?: Storage | null): Storage | null {
   return storage ?? getDefaultStorage();
-}
 
 function newId(): string {
   try {
@@ -80,18 +74,15 @@ function newId(): string {
     // fall through
   }
   return `doc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 /** All saved documents, most recently updated first. */
 export function listDocuments(storage?: Storage | null): SavedDocument[] {
   return sortNewestFirst(read(resolve(storage)));
-}
 
 function tidyTitle(title: string): string {
   const clean = title.replace(/\s+/g, " ").trim();
   if (!clean) return "";
   return clean;
-}
 
 /**
  * Save a document. If a document with the same text exists it is updated
@@ -149,11 +140,9 @@ export function saveDocument(
   const rest = docs.filter((d) => d.id !== doc.id);
   write(store, sortNewestFirst([doc, ...rest]).slice(0, MAX_DOCUMENTS));
   return doc;
-}
 
 export function getDocument(id: string, storage?: Storage | null): SavedDocument | null {
   return read(resolve(storage)).find((d) => d.id === id) ?? null;
-}
 
 /** Remember the reading position. Also marks the document as recently used. */
 export function updateProgress(
@@ -173,7 +162,6 @@ export function updateProgress(
     store,
     sortNewestFirst([updated, ...docs.filter((d) => d.id !== id)]),
   );
-}
 
 /**
  * Save the note for a document. The note is truncated to NOTE_MAX_LENGTH and
@@ -196,7 +184,6 @@ export function updateNote(
     sortNewestFirst([updated, ...docs.filter((d) => d.id !== id)]),
   );
   return updated;
-}
 
 /**
  * Single-line preview of a note: whitespace collapsed, "" for blank notes,
@@ -211,20 +198,40 @@ export function notePreview(note: string, max = NOTE_PREVIEW_LENGTH): string {
   const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : clean.slice(0, max);
   const stripped = cut.replace(/[\s,;:.\-–—]+$/, "");
   return `${stripped || clean.slice(0, max)}…`;
-}
+
+/**
+ * Return documents that match the query.
+ * Matches case-insensitively in title, text, or note.
+ * Title matches come first, then text or note, both groups sorted newest first.
+ * An empty or whitespace query returns all documents.
+ */
+export function searchDocuments(query: string, storage?: Storage | null): SavedDocument[] {
+  const docs = listDocuments(storage);
+  const q = query.trim().toLowerCase();
+  if (!q) return docs;
+  const titleMatches: SavedDocument[] = [];
+  const otherMatches: SavedDocument[] = [];
+  for (const d of docs) {
+    const title = d.title.toLowerCase();
+    if (title.includes(q)) {
+      titleMatches.push(d);
+    } else if (d.text.toLowerCase().includes(q) || d.note.toLowerCase().includes(q)) {
+      otherMatches.push(d);
+    }
+  }
+  return [...titleMatches, ...otherMatches];
+
 
 export function deleteDocument(id: string, storage?: Storage | null): void {
   const store = resolve(storage);
   const docs = read(store);
   const rest = docs.filter((d) => d.id !== id);
   if (rest.length !== docs.length) write(store, rest);
-}
 
 /** Remove all saved documents. */
 export function clearDocuments(storage?: Storage | null): void {
   const store = resolve(storage);
   write(store, []);
-}
 
 /** Remove all saved documents and return the list of deleted documents. */
 export function clearDocumentsAndReturn(storage?: Storage | null): SavedDocument[] {
@@ -232,7 +239,6 @@ export function clearDocumentsAndReturn(storage?: Storage | null): SavedDocument
   const docs = read(store);
   write(store, []);
   return docs;
-}
 
 /** First ~60 chars of the first sentence, cut at a word boundary, with an ellipsis. */
 export function deriveTitle(text: string): string {
