@@ -162,7 +162,7 @@ export function saveDocument(
         const slice = cleanTitle.slice(0, TITLE_MAX_LENGTH + 1);
         const lastSpace = slice.lastIndexOf(" ");
         const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : cleanTitle.slice(0, TITLE_MAX_LENGTH);
-        title = `${cut.replace(/[\s,;:.*-–—]+$/, "")}…`;
+        title = `${cut.replace(/[\s,;:.*\-–—]+$/, "")}…`;
       } else {
         title = cleanTitle;
       }
@@ -264,7 +264,7 @@ export function renameDocument(
     const slice = cleanTitle.slice(0, TITLE_MAX_LENGTH + 1);
     const lastSpace = slice.lastIndexOf(" ");
     const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : cleanTitle.slice(0, TITLE_MAX_LENGTH);
-    title = `${cut.replace(/[\s,;:.*-–—]+$/, "")}…`;
+    title = `${cut.replace(/[\s,;:.*\-–—]+$/, "")}…`;
   }
   const updated: SavedDocument = { ...doc, title, updatedAt: Date.now() };
   write(
@@ -284,7 +284,7 @@ export function notePreview(note: string, max = NOTE_PREVIEW_LENGTH): string {
   const slice = clean.slice(0, max + 1);
   const lastSpace = slice.lastIndexOf(" ");
   const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : clean.slice(0, max);
-  const stripped = cut.replace(/[\s,;:.*-–—]+$/, "");
+  const stripped = cut.replace(/[\s,;:.*\-–—]+$/, "");
   return `${stripped || clean.slice(0, max)}…`;
 }
 
@@ -319,5 +319,5 @@ export function deriveTitle(text: string): string {
   const slice = first.slice(0, TITLE_MAX_LENGTH + 1);
   const lastSpace = slice.lastIndexOf(" ");
   const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : first.slice(0, TITLE_MAX_LENGTH);
-  return `${cut.replace(/[\s,;:.*-–—]+$/, "")}…`;
+  return `${cut.replace(/[\s,;:.*\-–—]+$/, "")}…`;
 }
