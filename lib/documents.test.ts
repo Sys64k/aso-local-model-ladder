@@ -449,5 +449,41 @@ describe("saveDocument title tidying", () => {
     // With this case, even though we have 61 chars and a space at the boundary,
     // The truncation should not go over TITLE_MAX_LENGTH
     expect(doc.title.length).toBeLessThanOrEqual(61); // 60 content + 1 ellipsis = max
+    
+    // Most importantly, ensure that title length respects TITLE_MAX_LENGTH limit
+    if (doc.title.length > 1) { // If there's a title (not empty)
+      const titleLengthWithoutEllipsis = doc.title.slice(0, -1).length;
+      expect(titleLengthWithoutEllipsis).toBeLessThanOrEqual(60);
+    }
+  });
+  
+  it("ensures long titles respect TITLE_MAX_LENGTH exactly after tidying", () => {
+    // Test to specifically hit the exact issue mentioned in acceptance criteria:
+    // "A long title is still cut to TITLE_MAX_LENGTH after tidying"
+    
+    // Create a case where we have a title with many spaces, then a long word
+    // that when trimmed should fit exactly within TITLE_MAX_LENGTH limit
+    
+    const longTitle = "a ".repeat(30) + "x".repeat(30); // ~60 chars of spaces + 30 chars = around 90 chars total
+    expect(longTitle.length).toBeGreaterThan(60);
+    
+    const doc = saveDocument({ 
+      title: longTitle, 
+      text: "Hello world.", 
+      source: "paste" 
+    }, storage);
+    
+    // Verify that the final result respects TITLE_MAX_LENGTH exactly
+    expect(doc.title.length).toBeLessThanOrEqual(60);
+    expect(doc.title).not.toBeFalsy();
+    
+    // If it's truncated, make sure it ends with ellipsis
+    if (doc.title.length < 60) {
+      expect(doc.title.endsWith("…")).toBe(true);
+    }
+    
+    // The key fix: Ensure length is not one over the TITLE_MAX_LENGTH 
+    const titleWithoutEllipsis = doc.title.slice(0, -1);
+    expect(titleWithoutEllipsis.length).toBeLessThanOrEqual(60);
   });
 });

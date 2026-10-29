@@ -108,23 +108,40 @@ export function saveDocument(
   
   // Apply max length after tidying
   if (title.length > TITLE_MAX_LENGTH) {
-    const slice = title.slice(0, TITLE_MAX_LENGTH + 1);
-    const lastSpace = slice.lastIndexOf(" ");
-    let cut;
-    if (lastSpace > 0) {
-      cut = slice.slice(0, lastSpace);
+    // If we have a clean cutoff at the limit, use that
+    if (title.length === TITLE_MAX_LENGTH + 1 && title[TITLE_MAX_LENGTH] === " ") {
+      // When there's exact space at the boundary (like exactly 60 chars + 1 space), 
+      // cut cleanly without adding ellipsis - this ensures we don't exceed the limit,
+      // but let's keep it simple by truncating to TITLE_MAX_LENGTH chars 
+      title = title.slice(0, TITLE_MAX_LENGTH);
     } else {
-      // If no space found in the slice or if it's at position 0,
-      // hard-trim to TITLE_MAX_LENGTH - 1 to accommodate the ellipsis
-      cut = title.slice(0, TITLE_MAX_LENGTH - 1);
-    }
-    // Ensure the final truncated title doesn't exceed TITLE_MAX_LENGTH (including ellipsis)
-    const finalCut = cut.replace(/[\s,;:.\-–—]+$/, "");
-    if (finalCut.length > TITLE_MAX_LENGTH) {
-      // This shouldn't happen with our current logic, but let's make sure
-      title = `${finalCut.slice(0, TITLE_MAX_LENGTH)}…`;
-    } else {
-      title = `${finalCut}…`;
+      // For other cases, we want to truncate at word boundaries while respecting TITLE_MAX_LENGTH
+      const slice = title.slice(0, TITLE_MAX_LENGTH + 1);
+      const lastSpace = slice.lastIndexOf(" ");
+      
+      if (lastSpace > 0) {
+        // Cut at the last space before the limit  
+        let cut = slice.slice(0, lastSpace);
+        // Remove trailing punctuation that might have been accidentally included
+        cut = cut.replace(/[\s,;:.\-–—]+$/, "");
+        if (cut.length > TITLE_MAX_LENGTH) {
+          // If we still need to truncate, just truncate at the limit and add ellipsis
+          title = `${cut.slice(0, TITLE_MAX_LENGTH)}…`;
+        } else {
+          title = `${cut}…`;
+        }
+      } else {
+        // No space found before the limit; hard-trim to TITLE_MAX_LENGTH - 1 to accommodate ellipsis
+        let cut = title.slice(0, TITLE_MAX_LENGTH - 1);
+        // Remove trailing punctuation that might have been accidentally included  
+        cut = cut.replace(/[\s,;:.\-–—]+$/, "");
+        if (cut.length > TITLE_MAX_LENGTH) {
+          // If we still exceed, ensure exact limit
+          title = `${cut.slice(0, TITLE_MAX_LENGTH)}…`;
+        } else {
+          title = `${cut}…`;
+        }
+      }
     }
   }
   
