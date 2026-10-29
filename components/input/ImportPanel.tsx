@@ -115,6 +115,19 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [dragOver, setDragOver] = useState(false);
   const [stats, setStats] = useState<{ words: number; sentences: number; paragraphs: number; minutes: number } | null>(null);
   const statsRef = useRef<{ textLength: number; abortController: AbortController | null }>({ textLength: 0, abortController: null });
+  
+  // Reset stats when pasteText length goes below 20 characters immediately
+  useEffect(() => {
+    if (pasteText.length < 20) {
+      setStats(null);
+      
+      // Cancel any pending request
+      if (statsRef.current.abortController) {
+        statsRef.current.abortController.abort();
+        statsRef.current = { textLength: 0, abortController: null };
+      }
+    }
+  }, [pasteText]);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -319,7 +332,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
           }
         });
     } else {
-      // Clear stats when text is too short
+      // Clear stats when text is too short - immediately clear to avoid debounce lag
       setStats(null);
       
       // Cancel any pending request
