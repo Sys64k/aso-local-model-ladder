@@ -1,7 +1,7 @@
 "use client";
 
-import { type Ref, useState } from "react";
-import { notePreview, type DocumentSource, type SavedDocument, clearDocuments } from "@/lib/documents";
+import { type Ref, useState, useRef } from "react";
+import { notePreview, type DocumentSource, type SavedDocument, clearDocuments, renameDocument } from "@/lib/documents";
 import { Modal } from "./Modal";
 
 export const SOURCE_LABELS: Record<DocumentSource, string> = {
@@ -28,15 +28,23 @@ export interface RecentDocumentsProps {
   documents: SavedDocument[];
   onOpen: (doc: SavedDocument) => void;
   onDelete: (doc: SavedDocument) => void;
-+  onRename?: (doc: SavedDocument) => void;
+  onRename?: (doc: SavedDocument) => void;
   headingRef?: Ref<HTMLHeadingElement>;
   storage?: Storage | null;
   onClearAll?: () => void;
 }
 
 export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll }: RecentDocumentsProps) {
-  const [showClearModal, setShowClearModal] = useState(false);
-  
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>("");
+  const ignoreBlurRef = useRef(false);
+
+  function handleSaveRename(docId: string | null, title: string | undefined) {
+    const updated = docId && title ? renameDocument(docId, title, storage) : null;
+    if (updated && onRename) onRename(updated);
+    setEditingDocId(null);
+  }
+
   const handleClearAll = () => {
     clearDocuments(storage);
     setShowClearModal(false);
@@ -105,6 +113,40 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef, stora
                 >
                   Delete
                 </button>
+                <button
+                  type="button"
+                  aria-label={`Rename ${doc.title}`}
+                  onClick={() => { setEditingDocId(doc.id); setEditingValue(doc.title); }}
+                  className="min-h-12 min-w-12 self-center rounded-lg border-2 border-fg px-4 text-lg"
+                >
+                  Rename
+                </button>
+                {editingDocId === doc.id && (
+                  <input
+                    type="text"
+                    role="textbox"
+                    aria-label="Title"
+                    autoFocus
+                    value={editingValue}
+                    onChange={e => setEditingValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        handleSaveRename(doc.id, editingValue);
+                      } else if (e.key === 'Escape') {
+                        ignoreBlurRef.current = true;
+                        setEditingDocId(null);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (ignoreBlurRef.current) {
+                        ignoreBlurRef.current = false;
+                        return;
+                      }
+                      handleSaveRename(doc.id, editingValue);
+                    }}
+                    className="mt-2 flex-1 rounded-lg border border-fg px-3 py-1 text-base"
+                  />
+                )}
               </li>
               );
             })}
