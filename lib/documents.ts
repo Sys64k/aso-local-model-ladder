@@ -197,6 +197,27 @@ export function getDocument(id: string, storage?: Storage | null): SavedDocument
   return read(resolve(storage)).find((d) => d.id === id) ?? null;
 }
 
+export function renameDocument(id: string, title: string, storage?: Storage | null): SavedDocument | null {
+  const store = resolve(storage);
+  const docs = listDocuments(store);
+  const idx = docs.findIndex((d) => d.id === id);
+  if (idx === -1) return null;
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+  let newTitle = trimmed;
+  if (trimmed.length > TITLE_MAX_LENGTH) {
+    const slice = trimmed.slice(0, TITLE_MAX_LENGTH + 1);
+    const lastSpace = slice.lastIndexOf(' ');
+    const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : trimmed.slice(0, TITLE_MAX_LENGTH);
+    newTitle = `${cut.replace(/\s[\s,;:\.\-–—]+$/,'')}…`;
+  }
+  const doc = docs[idx];
+  const updated: SavedDocument = { ...doc, title: newTitle, updatedAt: Date.now() };
+  const rest = docs.filter((d) => d.id !== id);
+  write(store, sortNewestFirst([updated, ...rest]).slice(0, MAX_DOCUMENTS));
+  return updated;
+}
+
 /** Remember the reading position. Also marks the document as recently used. */
 export function updateProgress(
   id: string,

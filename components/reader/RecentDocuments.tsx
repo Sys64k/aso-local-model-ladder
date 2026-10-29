@@ -28,6 +28,7 @@ export interface RecentDocumentsProps {
   documents: SavedDocument[];
   onOpen: (doc: SavedDocument) => void;
   onDelete: (doc: SavedDocument) => void;
++  onRename?: (doc: SavedDocument) => void;
   headingRef?: Ref<HTMLHeadingElement>;
   storage?: Storage | null;
   onClearAll?: () => void;
