@@ -1,5 +1,8 @@
 import { getDefaultStorage } from "./storage";
 import { splitSentences } from "./text/segment";
+export function listDocuments(storage?: Storage | null): SavedDocument[] {
+  return sortNewestFirst(read(resolve(storage)));
+}
 
 export type DocumentSource = "paste" | "file" | "pdf" | "image" | "url";
 
@@ -83,8 +86,27 @@ function newId(): string {
 }
 
 /** All saved documents, most recently updated first. */
-export function listDocuments(storage?: Storage | null): SavedDocument[] {
-  return sortNewestFirst(read(resolve(storage)));
+export function searchDocuments(query: string, storage?: Storage | null): SavedDocument[] {
+  const store = resolve(storage);
+  const docs = read(store);
+  const qtrim = query.trim();
+  if (!qtrim) return sortNewestFirst(docs);
+  const qlow = qtrim.toLowerCase();
+  const titleMatches: SavedDocument[] = [];
+  const otherMatches: SavedDocument[] = [];
+  for (const d of docs) {
+    const titleL = d.title.toLowerCase();
+    const hasTitleMatch = titleL.includes(qlow);
+    if (hasTitleMatch) {
+      titleMatches.push(d);
+      continue;
+    }
+    const hasOtherMatch = d.text.toLowerCase().includes(qlow) || d.note.toLowerCase().includes(qlow);
+    if (hasOtherMatch) {
+      otherMatches.push(d);
+    }
+  }
+  return sortNewestFirst(titleMatches).concat(sortNewestFirst(otherMatches));
 }
 
 function tidyTitle(title: string): string {
