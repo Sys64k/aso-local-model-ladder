@@ -147,7 +147,7 @@ export function saveDocument(
   const store = resolve(storage);
   const docs = listDocuments(store);
   const now = Date.now();
-  
+
   // Tidy the title: trim, collapse whitespace, and cut if too long
   let title = input.title;
   if (title) {
@@ -162,7 +162,7 @@ export function saveDocument(
         const slice = cleanTitle.slice(0, TITLE_MAX_LENGTH + 1);
         const lastSpace = slice.lastIndexOf(" ");
         const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : cleanTitle.slice(0, TITLE_MAX_LENGTH);
-        title = `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+        title = `${cut.replace(/[\s,;:.*-–—]+$/, "")}…`;
       } else {
         title = cleanTitle;
       }
@@ -171,7 +171,7 @@ export function saveDocument(
     // If no title given at all, derive it
     title = deriveTitle(input.text);
   }
-  
+
   const existing = docs.find((d) => d.text === input.text);
   let doc: SavedDocument;
   if (existing) {
@@ -241,7 +241,40 @@ export function updateNote(
 }
 
 /**
- * Single-line preview of a note: whitespace collapsed, "" for blank notes,
+ * Rename the title of a saved document.
+ *
+ * The behavior mirrors {@link saveDocument} title handling: trim, collapse
+ * whitespace and enforce {@link TITLE_MAX_LENGTH} with word‑boundary truncation
+ * and an ellipsis.  An empty or whitespace‑only title results in `null` and no
+ * storage write.
+ */
+export function renameDocument(
+  id: string,
+  newTitle: string,
+  storage?: Storage | null,
+): SavedDocument | null {
+  const store = resolve(storage);
+  const docs = listDocuments(store);
+  const doc = docs.find((d) => d.id === id);
+  if (!doc) return null;
+  const cleanTitle = tidyTitle(newTitle);
+  if (!cleanTitle) return null;
+  let title = cleanTitle;
+  if (cleanTitle.length > TITLE_MAX_LENGTH) {
+    const slice = cleanTitle.slice(0, TITLE_MAX_LENGTH + 1);
+    const lastSpace = slice.lastIndexOf(" ");
+    const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : cleanTitle.slice(0, TITLE_MAX_LENGTH);
+    title = `${cut.replace(/[\s,;:.*-–—]+$/, "")}…`;
+  }
+  const updated: SavedDocument = { ...doc, title, updatedAt: Date.now() };
+  write(
+    store,
+    sortNewestFirst([updated, ...docs.filter((d) => d.id !== id)]),
+  );
+  return updated;
+}
+
+/** Single-line preview of a note: whitespace collapsed, "" for blank notes,
  * long notes cut at a word boundary with an ellipsis (like deriveTitle).
  */
 export function notePreview(note: string, max = NOTE_PREVIEW_LENGTH): string {
@@ -251,7 +284,7 @@ export function notePreview(note: string, max = NOTE_PREVIEW_LENGTH): string {
   const slice = clean.slice(0, max + 1);
   const lastSpace = slice.lastIndexOf(" ");
   const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : clean.slice(0, max);
-  const stripped = cut.replace(/[\s,;:.\-–—]+$/, "");
+  const stripped = cut.replace(/[\s,;:.*-–—]+$/, "");
   return `${stripped || clean.slice(0, max)}…`;
 }
 
@@ -286,5 +319,5 @@ export function deriveTitle(text: string): string {
   const slice = first.slice(0, TITLE_MAX_LENGTH + 1);
   const lastSpace = slice.lastIndexOf(" ");
   const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : first.slice(0, TITLE_MAX_LENGTH);
-  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  return `${cut.replace(/[\s,;:.*-–—]+$/, "")}…`;
 }
