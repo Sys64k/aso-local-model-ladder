@@ -114,6 +114,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [progress, setProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [stats, setStats] = useState<{ words: number; sentences: number; paragraphs: number; minutes: number } | null>(null);
+  const statsRef = useRef<{ textLength: number; abortController: AbortController | null }>({ textLength: 0, abortController: null });
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -278,11 +279,21 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
 
   const updateStats = useCallback(() => {
     if (pasteText.length >= 20) {
+      // Cancel any previous request
+      if (statsRef.current.abortController) {
+        statsRef.current.abortController.abort();
+      }
+      
+      // Create new abort controller for this request
+      const controller = new AbortController();
+      statsRef.current = { textLength: pasteText.length, abortController: controller };
+      
       // Fetch stats from server
       fetch("/api/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: pasteText }),
+        signal: controller.signal,
       })
         .then((res) => {
           if (res.ok) {
@@ -293,19 +304,29 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
           return null;
         })
         .then((data) => {
-          if (data && typeof data === "object") {
+          // Only update stats if this is still the latest request
+          if (statsRef.current.textLength === pasteText.length && data && typeof data === "object") {
             setStats(data);
           } else {
+            // Ignore stale response
             setStats(null);
           }
         })
-        .catch(() => {
-          // On error, clear stats
-          setStats(null);
+        .catch((err) => {
+          // Only clear stats if this wasn't an abort
+          if (err.name !== 'AbortError') {
+            setStats(null);
+          }
         });
     } else {
       // Clear stats when text is too short
       setStats(null);
+      
+      // Cancel any pending request
+      if (statsRef.current.abortController) {
+        statsRef.current.abortController.abort();
+        statsRef.current = { textLength: 0, abortController: null };
+      }
     }
   }, [pasteText]);
 
