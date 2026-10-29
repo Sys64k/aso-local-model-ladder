@@ -87,6 +87,48 @@ export function listDocuments(storage?: Storage | null): SavedDocument[] {
   return sortNewestFirst(read(resolve(storage)));
 }
 
+/**
+ * Search saved documents for a query string.
+ * Returns documents where the query (case‑insensitive, literal substring)
+ * appears in the title, or in the text, or in the note.
+ *
+ * Title matches are grouped first, newest first by updatedAt.
+ * Text/note matches are grouped after, also newest first.
+ * Each document appears at most once; if it matches the title it is included only
+ * in the title group.
+ *
+ * Whitespace‑only or empty queries return all documents ordered newest first.
+ * Errors reading storage return an empty array and do not throw.
+ */
+export function searchDocuments(query: string, storage?: Storage | null): SavedDocument[] {
+  const store = resolve(storage);
+  const docs = read(store);
+  // If no documents, return empty quickly.
+  if (!docs.length) return [];
+  const trimmed = query?.trim() ?? "";
+  if (!trimmed) return sortNewestFirst(docs);
+
+  const qLower = trimmed.toLowerCase();
+  const titleMatches: SavedDocument[] = [];
+  const otherMatches: SavedDocument[] = [];
+
+  for (const d of docs) {
+    const titleMatch = d.title.toLowerCase().includes(qLower);
+    const textMatch = d.text.toLowerCase().includes(qLower);
+    const noteMatch = d.note.toLowerCase().includes(qLower);
+    if (titleMatch) {
+      titleMatches.push(d);
+    } else if (textMatch || noteMatch) {
+      otherMatches.push(d);
+    }
+  }
+
+  titleMatches.sort((a, b) => b.updatedAt - a.updatedAt);
+  otherMatches.sort((a, b) => b.updatedAt - a.updatedAt);
+
+  return [...titleMatches, ...otherMatches];
+}
+
 function tidyTitle(title: string): string {
   const clean = title.replace(/\s+/g, " ").trim();
   if (!clean) return "";
