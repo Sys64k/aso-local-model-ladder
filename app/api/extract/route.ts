@@ -81,7 +81,7 @@ function parseTargetUrl(raw: string): URL | null {
   return url;
 }
 
-export async function POST(request: Request): Promise<Response> {
+export async function POST(request: Request) {: Promise<Response> {
   let raw: string | null;
   try {
     raw = await readRequestText(request, MAX_REQUEST_BYTES);
