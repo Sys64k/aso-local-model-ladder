@@ -113,6 +113,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [stats, setStats] = useState<{ words: number; sentences: number; paragraphs: number; minutes: number } | null>(null);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -274,6 +275,44 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
       setError(MESSAGES.unsupportedFile);
     }
   };
+
+  const updateStats = useCallback(() => {
+    if (pasteText.length >= 20) {
+      // Fetch stats from server
+      fetch("/api/stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pasteText }),
+      })
+        .then((res) => {
+          if (res.ok) {
+            return res.json();
+          }
+          // If fetch fails, clear stats
+          setStats(null);
+          return null;
+        })
+        .then((data) => {
+          if (data && typeof data === "object") {
+            setStats(data);
+          } else {
+            setStats(null);
+          }
+        })
+        .catch(() => {
+          // On error, clear stats
+          setStats(null);
+        });
+    } else {
+      // Clear stats when text is too short
+      setStats(null);
+    }
+  }, [pasteText]);
+
+  useEffect(() => {
+    const handler = setTimeout(updateStats, 500); // Debounce the stats update
+    return () => clearTimeout(handler);
+  }, [updateStats]);
 
   const onPasteSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -449,6 +488,26 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
                 rows={8}
                 className="block min-h-48 w-full rounded-lg border-2 border-current bg-transparent p-3 text-lg"
               />
+              {stats && (
+                <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Words</p>
+                    <p className="text-xl">{stats.words}</p>
+                  </div>
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Sentences</p>
+                    <p className="text-xl">{stats.sentences}</p>
+                  </div>
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Paragraphs</p>
+                    <p className="text-xl">{stats.paragraphs}</p>
+                  </div>
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Reading time</p>
+                    <p className="text-xl">{stats.minutes} min</p>
+                  </div>
+                </div>
+              )}
               <button type="submit" className={PRIMARY_BUTTON}>
                 Read this text
               </button>
