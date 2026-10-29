@@ -113,6 +113,21 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [stats, setStats] = useState<{ words: number; sentences: number; paragraphs: number; minutes: number } | null>(null);
+  const statsRef = useRef<{ textLength: number; abortController: AbortController | null }>({ textLength: 0, abortController: null });
+  
+  // Reset stats when pasteText length goes below 20 characters immediately
+  useEffect(() => {
+    if (pasteText.length < 20) {
+      setStats(null);
+      
+      // Cancel any pending request
+      if (statsRef.current.abortController) {
+        statsRef.current.abortController.abort();
+        statsRef.current = { textLength: 0, abortController: null };
+      }
+    }
+  }, [pasteText]);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -274,6 +289,64 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
       setError(MESSAGES.unsupportedFile);
     }
   };
+
+  const updateStats = useCallback(() => {
+    if (pasteText.length >= 20) {
+      // Cancel any previous request
+      if (statsRef.current.abortController) {
+        statsRef.current.abortController.abort();
+      }
+      
+      // Create new abort controller for this request
+      const controller = new AbortController();
+      statsRef.current = { textLength: pasteText.length, abortController: controller };
+      
+      // Fetch stats from server
+      fetch("/api/stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pasteText }),
+        signal: controller.signal,
+      })
+        .then((res) => {
+          if (res.ok) {
+            return res.json();
+          }
+          // If fetch fails, clear stats
+          setStats(null);
+          return null;
+        })
+        .then((data) => {
+          // Only update stats if this is still the latest request
+          if (statsRef.current.textLength === pasteText.length && data && typeof data === "object") {
+            setStats(data);
+          } else {
+            // Ignore stale response
+            setStats(null);
+          }
+        })
+        .catch((err) => {
+          // Only clear stats if this wasn't an abort
+          if (err.name !== 'AbortError') {
+            setStats(null);
+          }
+        });
+    } else {
+      // Clear stats when text is too short - immediately clear to avoid debounce lag
+      setStats(null);
+      
+      // Cancel any pending request
+      if (statsRef.current.abortController) {
+        statsRef.current.abortController.abort();
+        statsRef.current = { textLength: 0, abortController: null };
+      }
+    }
+  }, [pasteText]);
+
+  useEffect(() => {
+    const handler = setTimeout(updateStats, 500); // Debounce the stats update
+    return () => clearTimeout(handler);
+  }, [updateStats]);
 
   const onPasteSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -449,6 +522,26 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
                 rows={8}
                 className="block min-h-48 w-full rounded-lg border-2 border-current bg-transparent p-3 text-lg"
               />
+              {stats && (
+                <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Words</p>
+                    <p className="text-xl">{stats.words}</p>
+                  </div>
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Sentences</p>
+                    <p className="text-xl">{stats.sentences}</p>
+                  </div>
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Paragraphs</p>
+                    <p className="text-xl">{stats.paragraphs}</p>
+                  </div>
+                  <div className="rounded-lg border-2 border-current p-2">
+                    <p className="text-sm font-semibold">Reading time</p>
+                    <p className="text-xl">{stats.minutes} min</p>
+                  </div>
+                </div>
+              )}
               <button type="submit" className={PRIMARY_BUTTON}>
                 Read this text
               </button>
