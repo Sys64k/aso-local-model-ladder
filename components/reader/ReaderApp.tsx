@@ -474,7 +474,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
                 onDelete={handleDelete}
                 headingRef={recentHeadingRef}
                 storage={storage}
-                onClearAll={() => setDocuments(listDocuments(storage))}
+                onRename={() => setDocuments(listDocuments(storage))}
               />
             </div>
           ) : (
