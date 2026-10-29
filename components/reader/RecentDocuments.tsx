@@ -125,7 +125,7 @@ export function RecentDocuments({
                       onClick={() => onOpen(doc)}
                       className="flex min-h-12 min-w-0 flex-1 flex-col items-start rounded-lg px-3 py-2 text-left text-lg"
                     >
-                      <span className="font-bold break-words">{doc.title}</span> <span className="text-base text-muted">{SOURCE_LABELS[doc.source]} · {formatDate(doc.updatedAt)}</span>{preview ? (<><span data-testid="note-preview" className="text-base text-fg break-words">Note: {preview}</span></>) : null}
+                      <span className="font-bold break-words">{doc.title}</span> <span className="text-base text-muted">{SOURCE_LABELS[doc.source]} · {formatDate(doc.updatedAt)}</span>{preview ? (<><span className="text-base text-fg break-words"> Note: {preview}</span></>) : null}
                     </button>
                   )}
                   <button
