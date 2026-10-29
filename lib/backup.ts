@@ -15,6 +15,15 @@ export interface BackupData {
 export function exportBackup(storage?: Storage | null): string {
   const store = storage ?? getDefaultStorage();
   
+  // Handle case where store might be null (no localStorage available)
+  if (!store) {
+    // Return empty backup object for client-side apps when localStorage is unavailable
+    return JSON.stringify({
+      documents: [],
+      settings: {}
+    });
+  }
+  
   const documents = listDocuments(store);
   const settings = loadSettings(store);
   
@@ -30,10 +39,15 @@ export function exportBackup(storage?: Storage | null): string {
  * Imports documents and settings from a backup JSON string.
  * @param json The JSON string containing the backup data.
  * @param storage Optional storage to write to; uses default if not provided.
- * @throws Error if the JSON is invalid.
+ * @throws Error if the JSON is invalid or backup restore fails.
  */
 export function importBackup(json: string, storage?: Storage | null): void {
   const store = storage ?? getDefaultStorage();
+  
+  // Handle case where store might be null (no localStorage available)
+  if (!store) {
+    throw new Error("Failed to restore backup: no storage available");
+  }
   
   let parsed: unknown;
   try {
@@ -43,19 +57,23 @@ export function importBackup(json: string, storage?: Storage | null): void {
   }
   
   // Validate the structure
-  if (!parsed || typeof parsed !== "object") {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Invalid backup data: expected object");
   }
   
   const data = parsed as Partial<BackupData>;
   
-  // Process documents
+  // Check that it has required fields
+  if (!Array.isArray(data.documents)) {
+    throw new Error("Invalid backup data: documents must be an array");
+  }
+  
+  // Validate settings (it's ok for it to be null/undefined)
+  
+  // Process documents - validate and parse individual documents
   let documents: SavedDocument[] = [];
-  if (Array.isArray(data.documents)) {
-    documents = data.documents.filter((doc): doc is SavedDocument => {
-      return (
-        typeof doc === "object" &&
-        doc !== null &&
+  for (const doc of data.documents) {
+    if (doc && typeof doc === "object" &&
         typeof doc.id === "string" &&
         typeof doc.title === "string" &&
         typeof doc.text === "string" &&
@@ -64,9 +82,9 @@ export function importBackup(json: string, storage?: Storage | null): void {
         typeof doc.createdAt === "number" &&
         typeof doc.updatedAt === "number" &&
         typeof doc.lastSentenceIndex === "number" &&
-        typeof doc.note === "string"
-      );
-    });
+        typeof doc.note === "string") {
+      documents.push(doc as SavedDocument);
+    }
   }
   
   // Process settings
@@ -81,33 +99,43 @@ export function importBackup(json: string, storage?: Storage | null): void {
   
   // Merge all documents - imported ones overwrite existing ones with same ID
   const existingDocuments = listDocuments(store);
-  const docIdSet = new Set<string>();
-  const allDocs: SavedDocument[] = [];
   
-  // Add imported documents first (they take precedence)
+  // Create a map of imported documents by ID for fast lookup
+  const importedDocMap = new Map<string, SavedDocument>();
   for (const doc of documents) {
-    allDocs.push(doc);
-    docIdSet.add(doc.id);
+    importedDocMap.set(doc.id, doc);
   }
   
-  // Add existing documents that weren't in backup
+  // Collect final set of documents
+  const finalDocs: SavedDocument[] = [];
+  
+  // First, add all documents from backup - these take precedence
+  for (const doc of documents) {
+    finalDocs.push(doc);
+  }
+  
+  // Then add existing docs that don't exist in the import
   for (const existingDoc of existingDocuments) {
-    if (!docIdSet.has(existingDoc.id)) {
-      allDocs.push(existingDoc);
+    if (!importedDocMap.has(existingDoc.id)) {
+      finalDocs.push(existingDoc);
     }
   }
   
   // Sort by update time (newest first) 
-  const sorted = allDocs.sort((a, b) => b.updatedAt - a.updatedAt);
+  const sorted = finalDocs.sort((a, b) => b.updatedAt - a.updatedAt);
   
   // Apply MAX_DOCUMENTS limit 
   const cappedDocuments = sorted.slice(0, MAX_DOCUMENTS);
   
   // Save everything
-  saveSettings(settings, store);
-  
-  // Write documents manually to avoid conflicts with existing save logic
-  if (store) {
-    store.setItem("readaloud:documents:v1", JSON.stringify(cappedDocuments));
+  try {
+    saveSettings(settings, store);
+    
+    // Write documents manually to avoid conflicts with existing save logic
+    if (store) {
+      store.setItem("readaloud:documents:v1", JSON.stringify(cappedDocuments));
+    }
+  } catch (e) {
+    throw new Error("Failed to restore backup: " + (e as Error).message);
   }
 }
