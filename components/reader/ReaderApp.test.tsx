@@ -619,6 +619,22 @@ describe("recent documents", () => {
     expect(listDocuments()).toHaveLength(0);
     expect(screen.getByRole("heading", { name: "Recent documents" })).toHaveFocus();
   });
+
+  it("renames a document from the recent list", async () => {
+    const doc = saveDocument({ title: "Old name", text: "Some old text.", source: "file" });
+    const { user } = setup();
+    const item = screen.getByRole("button", { name: /^Old name/ }).closest("li") as HTMLElement;
+    await user.click(within(item).getByRole("button", { name: /^Rename\b/ }));
+    const field = within(item).getByRole("textbox");
+    await user.clear(field);
+    await user.type(field, "New name{Enter}");
+    expect(screen.getByRole("button", { name: /^New name/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Old name/ })).not.toBeInTheDocument();
+    expect(listDocuments()).toHaveLength(1);
+    expect(listDocuments()[0]).toMatchObject({ id: doc.id, title: "New name", text: "Some old text." });
+    await user.click(screen.getByRole("button", { name: /^New name/ }));
+    expect(screen.getByRole("heading", { level: 1, name: "New name" })).toBeInTheDocument();
+  });
 });
 
 describe("notes", () => {
