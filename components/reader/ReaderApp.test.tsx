@@ -852,6 +852,32 @@ describe("notes", () => {
   });
 });
 
+describe("renaming a recent document", () => {
+  it("renames from the home screen and keeps the new title", async () => {
+    saveDocument({ title: "Old one", text: "Some old text.", source: "file" });
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Rename Old one" }));
+    const field = screen.getByRole("textbox", { name: /title/i });
+    await user.clear(field);
+    await user.type(field, "New + improved{Enter}");
+    expect(screen.getByRole("button", { name: /^New \+ improved/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Old one/ })).not.toBeInTheDocument();
+    expect(listDocuments()).toHaveLength(1);
+    expect(listDocuments()[0].title).toBe("New + improved");
+  });
+
+  it("Escape keeps the old title", async () => {
+    saveDocument({ title: "Old one", text: "Some old text.", source: "file" });
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Rename Old one" }));
+    const field = screen.getByRole("textbox", { name: /title/i });
+    await user.clear(field);
+    await user.type(field, "Nope{Escape}");
+    expect(screen.getByRole("button", { name: /^Old one/ })).toBeInTheDocument();
+    expect(listDocuments()[0].title).toBe("Old one");
+  });
+});
+
 describe("without speech synthesis", () => {
   it("shows a notice; text display and settings still work", async () => {
     restoreSpeech();
