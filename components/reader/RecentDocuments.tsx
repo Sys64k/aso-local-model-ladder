@@ -36,6 +36,7 @@ export interface RecentDocumentsProps {
 
 export function RecentDocuments({ documents, onOpen, onDelete, headingRef, storage, onClearAll }: RecentDocumentsProps) {
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [showClearModal, setShowClearModal] = useState(false);
   const [editingValue, setEditingValue] = useState<string>("");
   const ignoreBlurRef = useRef(false);
 
@@ -53,12 +54,12 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef, stora
       onClearAll();
     }
   };
-  
+
   const openClearModal = (event: React.MouseEvent) => {
     event.stopPropagation();
     setShowClearModal(true);
   };
-  
+
   return (
     <section aria-labelledby="recent-heading" className="space-y-4">
       <h2 id="recent-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
@@ -69,7 +70,7 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef, stora
           Nothing here yet. Documents you read will appear here.
         </p>
       ) : (
-        <>
+        <>        
           <div className="flex justify-end">
             <button
               type="button"
@@ -83,71 +84,72 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef, stora
             {documents.map((doc) => {
               const preview = notePreview(doc.note);
               return (
-              <li
-                key={doc.id}
-                className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2"
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpen(doc)}
-                  className="flex min-h-12 min-w-0 flex-1 flex-col items-start rounded-lg px-3 py-2 text-left text-lg"
+                <li
+                  key={doc.id}
+                  className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2"
                 >
-                  <span className="font-bold break-words">{doc.title}</span>{" "}
-                  <span className="text-base text-muted">
-                    {SOURCE_LABELS[doc.source]} · {formatDate(doc.updatedAt)}
-                  </span>
-                  {preview ? (
-                    <>
-                      {" "}
-                      <span data-testid="note-preview" className="text-base text-fg break-words">
-                        Note: {preview}
-                      </span>
-                    </>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Delete ${doc.title}`}
-                  onClick={() => onDelete(doc)}
-                  className="min-h-12 min-w-12 self-center rounded-lg border-2 border-fg px-4 text-lg"
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Rename ${doc.title}`}
-                  onClick={() => { setEditingDocId(doc.id); setEditingValue(doc.title); }}
-                  className="min-h-12 min-w-12 self-center rounded-lg border-2 border-fg px-4 text-lg"
-                >
-                  Rename
-                </button>
-                {editingDocId === doc.id && (
-                  <input
-                    type="text"
-                    role="textbox"
-                    aria-label="Title"
-                    autoFocus
-                    value={editingValue}
-                    onChange={e => setEditingValue(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
+                  <button
+                    type="button"
+                    onClick={() => onOpen(doc)}
+                    className="flex min-h-12 min-w-0 flex-1 flex-col items-start rounded-lg px-3 py-2 text-left text-lg"
+                  >
+                    <span className="font-bold break-words">{doc.title}</span> {" "}
+                    <span className="text-base text-muted">
+                      {SOURCE_LABELS[doc.source]} · {formatDate(doc.updatedAt)}
+                    </span>
+                    {preview ? (
+                      <>
+                        " "
+                        <span data-testid="note-preview" className="text-base text-fg break-words">
+                          Note: {preview}
+                        </span>
+                      </>
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${doc.title}`}
+                    onClick={() => onDelete(doc)}
+                    className="min-h-12 min-w-12 self-center rounded-lg border-2 border-fg px-4 text-lg"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Rename ${doc.title}`}
+                    onClick={() => { setEditingDocId(doc.id); setEditingValue(doc.title); }}
+                    className="min-h-12 min-w-12 self-center rounded-lg border-2 border-fg px-4 text-lg"
+                  >
+                    Rename
+                  </button>
+                  {editingDocId === doc.id && (
+                    <input
+                      type="text"
+                      role="textbox"
+                      aria-label="Title"
+                      autoFocus
+                      value={editingValue}
+                      onChange={e => setEditingValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          ignoreBlurRef.current = true;
+                          handleSaveRename(doc.id, editingValue);
+                        } else if (e.key === 'Escape') {
+                          ignoreBlurRef.current = true;
+                          setEditingDocId(null);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (ignoreBlurRef.current) {
+                          ignoreBlurRef.current = false;
+                          return;
+                        }
                         handleSaveRename(doc.id, editingValue);
-                      } else if (e.key === 'Escape') {
-                        ignoreBlurRef.current = true;
-                        setEditingDocId(null);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (ignoreBlurRef.current) {
-                        ignoreBlurRef.current = false;
-                        return;
-                      }
-                      handleSaveRename(doc.id, editingValue);
-                    }}
-                    className="mt-2 flex-1 rounded-lg border border-fg px-3 py-1 text-base"
-                  />
-                )}
-              </li>
+                      }}
+                      className="mt-2 flex-1 rounded-lg border border-fg px-3 py-1 text-base"
+                    />
+                  )}
+                </li>
               );
             })}
           </ul>
