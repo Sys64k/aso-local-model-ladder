@@ -1,5 +1,24 @@
-import { getDefaultStorage } from "./storage";
-import { splitSentences } from "./text/segment";
+export function searchDocuments(query: string, storage?: Storage | null): SavedDocument[] {
+  const docs = read(resolve(storage));
+  const trimmed = (query ?? "").trim();
+  if (!trimmed) return sortNewestFirst(docs);
+  const q = trimmed.toLowerCase();
+  const titleMatches: SavedDocument[] = [];
+  const contentMatches: SavedDocument[] = [];
+  for (const doc of docs) {
+    const titleLower = doc.title.toLowerCase();
+    if (titleLower.includes(q)) {
+      titleMatches.push(doc);
+      continue;
+    }
+    const textLower = doc.text.toLowerCase();
+    const noteLower = doc.note.toLowerCase();
+    if (textLower.includes(q) || noteLower.includes(q)) {
+      contentMatches.push(doc);
+    }
+  }
+  return [...sortNewestFirst(titleMatches), ...sortNewestFirst(contentMatches)];
+}
 
 export type DocumentSource = "paste" | "file" | "pdf" | "image" | "url";
 
