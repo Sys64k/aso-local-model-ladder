@@ -359,3 +359,39 @@ describe("deriveTitle", () => {
     expect(title).toBe(`${"x".repeat(60)}…`);
   });
 });
+
+describe("saveDocument title tidying", () => {
+  it("trims surrounding whitespace and collapses internal runs of whitespace", () => {
+    const doc = saveDocument({ title: "  My   doc  ", text: "Hello world.", source: "paste" }, storage);
+    expect(doc.title).toBe("My doc");
+  });
+
+  it("handles titles that are only whitespace", () => {
+    const doc = saveDocument({ title: "   \n\t  ", text: "Hello world.", source: "paste" }, storage);
+    // Should fall back to the same title an empty one gets today (derived from text)
+    expect(doc.title).toBe("Hello world.");
+  });
+
+  it("handles long titles that need to be truncated after tidying", () => {
+    const longTitle = "This is a very long title with many   spaces   that   should   get   trimmed";
+    const doc = saveDocument({ 
+      title: longTitle, 
+      text: "Hello world.", 
+      source: "paste" 
+    }, storage);
+    // Should be truncated to TITLE_MAX_LENGTH (60) after tidy
+    expect(doc.title.length).toBeLessThanOrEqual(60);
+    // Make sure it still has the ellipsis for truncation
+    expect(doc.title.endsWith("…")).toBe(true);
+  });
+
+  it("preserves whitespace within text when deriving title", () => {
+    const doc = saveDocument({ 
+      title: "   \n\t  ", 
+      text: "Hello    world   test   text.", 
+      source: "paste" 
+    }, storage);
+    // Should derive from the text and collapse multiple spaces
+    expect(doc.title).toBe("Hello world test text.");
+  });
+});

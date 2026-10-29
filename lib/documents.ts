@@ -99,7 +99,21 @@ export function saveDocument(
   const store = resolve(storage);
   const docs = listDocuments(store);
   const now = Date.now();
-  const title = input.title?.trim() || deriveTitle(input.text);
+  let title = input.title?.trim() || deriveTitle(input.text);
+  
+  // Tidy title: collapse internal whitespace runs to single spaces
+  if (title) {
+    title = title.replace(/\s+/g, " ");
+  }
+  
+  // Apply max length after tidying
+  if (title.length > TITLE_MAX_LENGTH) {
+    const slice = title.slice(0, TITLE_MAX_LENGTH + 1);
+    const lastSpace = slice.lastIndexOf(" ");
+    const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : title.slice(0, TITLE_MAX_LENGTH);
+    title = `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  }
+  
   const existing = docs.find((d) => d.text === input.text);
   let doc: SavedDocument;
   if (existing) {
