@@ -99,7 +99,7 @@ export function saveDocument(
   const store = resolve(storage);
   const docs = listDocuments(store);
   const now = Date.now();
-  const title = input.title?.trim() || deriveTitle(input.text);
+  const title = tidyTitle(input.title) || deriveTitle(input.text);
   const existing = docs.find((d) => d.text === input.text);
   let doc: SavedDocument;
   if (existing) {
@@ -200,5 +200,20 @@ export function deriveTitle(text: string): string {
   const slice = first.slice(0, TITLE_MAX_LENGTH + 1);
   const lastSpace = slice.lastIndexOf(" ");
   const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : first.slice(0, TITLE_MAX_LENGTH);
+  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+}
+
+/**
+ * Tidy a title: collapse whitespace, trim, and cut at a word boundary if needed.
+ * If the result is empty, returns the empty string (not "Untitled").
+ * This is the same logic deriveTitle uses to cut long titles.
+ */
+function tidyTitle(title: string): string {
+  const clean = title.replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  if (clean.length <= TITLE_MAX_LENGTH) return clean;
+  const slice = clean.slice(0, TITLE_MAX_LENGTH + 1);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : clean.slice(0, TITLE_MAX_LENGTH);
   return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
 }
