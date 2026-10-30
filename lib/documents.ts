@@ -24,7 +24,7 @@ export const NOTE_PREVIEW_LENGTH = 80;
 const SOURCES: readonly DocumentSource[] = ["paste", "file", "pdf", "image", "url"];
 
 /** Validates the stored shape; `note` is optional so older v1 data stays valid. */
-function isDocument(v: unknown): v is Omit<SavedDocument, "note"> & { note?: unknown } {
+export function isDocument(v: unknown): v is Omit<SavedDocument, "note"> & { note?: unknown } {
   if (!v || typeof v !== "object") return false;
   const d = v as Record<string, unknown>;
   return (
@@ -44,7 +44,7 @@ function sortNewestFirst(docs: SavedDocument[]): SavedDocument[] {
   return docs.slice().sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function read(storage: Storage | null): SavedDocument[] {
+export function read(storage: Storage | null): SavedDocument[] {
   if (!storage) return [];
   try {
     const raw = storage.getItem(DOCUMENTS_STORAGE_KEY);
@@ -59,7 +59,7 @@ function read(storage: Storage | null): SavedDocument[] {
   }
 }
 
-function write(storage: Storage | null, docs: SavedDocument[]): void {
+export function write(storage: Storage | null, docs: SavedDocument[]): void {
   if (!storage) return;
   try {
     storage.setItem(DOCUMENTS_STORAGE_KEY, JSON.stringify(docs));
