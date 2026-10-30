@@ -38,6 +38,10 @@ beforeEach(() => {
   ocrMock.mockReset();
   pdfMock.mockReset();
   fetchMock.mockReset();
+  // Mock the /api/stats route to return empty result by default
+  vi.mocked(fetchMock).mockResolvedValue(
+    new Response(JSON.stringify({ words: 0, sentences: 0, paragraphs: 0, minutes: 0 }), { status: 200 }),
+  );
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -348,6 +352,91 @@ describe("web page", () => {
     await user.click(screen.getByRole("button", { name: "Get text" }));
     expect(screen.getByRole("alert")).toHaveTextContent(MESSAGES.emptyUrl);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("text statistics", () => {
+  it("shows the statistics for pasted text at least 20 characters", async () => {
+    const { user } = setup();
+    const textarea = screen.getByLabelText("Text to read");
+
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          words: 8,
+          sentences: 3,
+          paragraphs: 2,
+          minutes: 1,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    // Start typing - no stats yet
+    await user.type(textarea, "Hello");
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 350)));
+    expect(screen.queryByText(/words · /)).not.toBeInTheDocument();
+
+    // Add more text to reach 20 chars
+    await user.type(textarea, " world. This is a test.");
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 350)));
+    expect(screen.queryByText(/words · /)).toBeInTheDocument();
+    expect(screen.getByText(/8 words · 3 sentences · 2 paragraphs · ~1 minute read/)).toBeInTheDocument();
+  });
+
+  it("does not show statistics for short text", async () => {
+    const { user } = setup();
+    const textarea = screen.getByLabelText("Text to read");
+    await user.type(textarea, "Hello");
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 350)));
+    expect(screen.queryByText(/words · /)).not.toBeInTheDocument();
+
+    // Even if normalizes to 20 chars after trimming
+    await user.type(textarea, "   ");
+    await user.type(textarea, "   ");
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 350)));
+    expect(screen.queryByText(/words · /)).not.toBeInTheDocument();
+  });
+
+  it("clears statistics when text drops below 20 characters", async () => {
+    const { user } = setup();
+    const textarea = screen.getByLabelText("Text to read");
+
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          words: 8,
+          sentences: 3,
+          paragraphs: 2,
+          minutes: 1,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    // Start with text that's long enough
+    await user.type(textarea, "Hello world. This is a test.");
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 350)));
+    expect(screen.getByText(/words · /)).toBeInTheDocument();
+
+    // Reduce to below 20 chars
+    await user.type(textarea, "  ");
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 350)));
+    expect(screen.queryByText(/words · /)).not.toBeInTheDocument();
+  });
+
+  it("does not show error dialog when a failing request occurs", async () => {
+    const { user } = setup();
+    const textarea = screen.getByLabelText("Text to read");
+
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "bad_request" }), { status: 400 }),
+    );
+
+    // Type text that would trigger a valid request
+    await user.type(textarea, "Hello world. This is a test.");
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 350)));
+    expect(screen.getByRole("alert")).toBeEmptyDOMElement();
   });
 });
 

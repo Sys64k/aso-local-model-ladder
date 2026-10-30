@@ -136,7 +136,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
     };
   }, []);
 
-  // Fetch text statistics when the pasted text changes and is at least 20 characters.
+  // Fetch text statistics when the pasted text changes and is at least 20 characters (after normalization).
   useEffect(() => {
     // Cancel any in-flight request
     statsAbortControllerRef.current?.abort();
@@ -169,7 +169,9 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
         } catch {
           setStats(null);
         }
-      } else {
+      }
+      // Clear stats if text is too short (no need to fetch)
+      if (!text || text.length < 20) {
         setStats(null);
       }
     };
