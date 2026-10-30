@@ -197,13 +197,14 @@ export function tidyTitle(title: string): string {
   const collapsed = (title ?? "").replace(/\s+/g, " ").trim();
   // If the result is empty, return an empty string (will be replaced by deriveTitle)
   if (!collapsed) return "";
-  // Cut at TITLE_MAX_LENGTH with word boundary and ellipsis
+  // Cut at TITLE_MAX_LENGTH with word boundary handling and ellipsis
   if (collapsed.length <= TITLE_MAX_LENGTH) return collapsed;
-  const slice = collapsed.slice(0, TITLE_MAX_LENGTH);
+  const slice = collapsed.slice(0, TITLE_MAX_LENGTH + 1);
   const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : slice;
-  const truncated = cut.replace(/[\s,;:.\-–—]+$/, "");
-  return `${truncated}…`;
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : slice.slice(0, TITLE_MAX_LENGTH);
+  const truncated = cut.replace(/[\s,;:.\-–—]+$/, " ");
+  const final = truncated.trim();
+  return `${final}…`;
 }
 
 export function deriveTitle(text: string): string {

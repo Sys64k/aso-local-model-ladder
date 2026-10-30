@@ -74,11 +74,19 @@ describe("document store", () => {
     expect(doc.title).toContain("…");
   });
 
-  it("handles long titles without spaces, staying at or below TITLE_MAX_LENGTH", () => {
+  it("handles long titles without spaces, staying at or below TITLE_MAX_LENGTH + 2", () => {
     const longTitleWithoutSpaces = "a".repeat(TITLE_MAX_LENGTH - 1) + "bc";
     const doc = saveDocument({ title: longTitleWithoutSpaces, text: "Content.", source: "paste" }, storage);
-    expect(doc.title.length).toBeLessThanOrEqual(TITLE_MAX_LENGTH + 1);
+    expect(doc.title.length).toBeLessThanOrEqual(TITLE_MAX_LENGTH + 2);
     expect(doc.title).toContain("…");
+  });
+
+  it("handles long titles without spaces, tidyTitle retains TITLE_MAX_LENGTH characters plus ellipsis", () => {
+    const longTitleWithoutSpaces = "a".repeat(TITLE_MAX_LENGTH - 1) + "bc";
+    const doc = saveDocument({ title: longTitleWithoutSpaces, text: "Content.", source: "paste" }, storage);
+    // Slice at TITLE_MAX_LENGTH = 60 chars, then add ellipsis = 61 total
+    expect(doc.title.length).toBe(TITLE_MAX_LENGTH + 1);
+    expect(doc.title.endsWith("…")).toBe(true);
   });
 
   it("lists newest first", () => {
