@@ -99,7 +99,12 @@ export function saveDocument(
   const store = resolve(storage);
   const docs = listDocuments(store);
   const now = Date.now();
-  const title = input.title?.trim() || deriveTitle(input.text);
+  let title = (input.title ?? "").replace(/\s+/g, " ").trim();
+  if (!title) {
+    title = deriveTitle(input.text);
+  } else {
+    title = cutTitle(title, TITLE_MAX_LENGTH);
+  }
   const existing = docs.find((d) => d.text === input.text);
   let doc: SavedDocument;
   if (existing) {
@@ -199,15 +204,20 @@ export function clearDocuments(storage?: Storage | null): void {
   write(store, []);
 }
 
+function cutTitle(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const slice = text.slice(0, maxLength + 1);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : text.slice(0, maxLength);
+  const stripped = cut.replace(/[\s,;:.\-–—]+$/, "");
+  return `${stripped}…`;
+}
+
 /** First ~60 chars of the first sentence, cut at a word boundary, with an ellipsis. */
 export function deriveTitle(text: string): string {
   const clean = (text ?? "").replace(/\s+/g, " ").trim();
   if (!clean) return "Untitled";
   // Only look at the beginning; splitting a whole book just for the title is wasteful.
   const first = splitSentences(clean.slice(0, 500))[0]?.text ?? clean;
-  if (first.length <= TITLE_MAX_LENGTH) return first;
-  const slice = first.slice(0, TITLE_MAX_LENGTH + 1);
-  const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : first.slice(0, TITLE_MAX_LENGTH);
-  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  return cutTitle(first, TITLE_MAX_LENGTH);
 }
