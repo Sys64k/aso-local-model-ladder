@@ -5,6 +5,7 @@ import {
   MAX_DOCUMENTS,
   NOTE_MAX_LENGTH,
   NOTE_PREVIEW_LENGTH,
+  clearDocuments,
   deleteDocument,
   deriveTitle,
   getDocument,
@@ -152,6 +153,103 @@ describe("document store", () => {
     expect(() => saveDocument({ title: "C", text: "c", source: "image" }, storage)).not.toThrow();
     expect(() => updateProgress(ok.id, 2, storage)).not.toThrow();
     expect(() => deleteDocument(ok.id, storage)).not.toThrow();
+  });
+});
+
+describe("clearDocuments", () => {
+  function expectNoStoredDocuments(store: Storage) {
+    // Either the key is removed or an empty list is written; both are fine.
+    expect([null, "[]"]).toContain(store.getItem(DOCUMENTS_STORAGE_KEY));
+  }
+
+  it("removes every saved document, notes included", () => {
+    const a = saveDocument({ title: "A", text: "alpha text", source: "paste" }, storage);
+    tick();
+    const b = saveDocument({ title: "B", text: "beta text", source: "pdf" }, storage);
+    tick();
+    saveDocument({ title: "C", text: "gamma text", source: "url" }, storage);
+    updateNote(a.id, "secret-note-a", storage);
+    updateProgress(b.id, 2, storage);
+
+    clearDocuments(storage);
+
+    expect(listDocuments(storage)).toEqual([]);
+    expect(getDocument(a.id, storage)).toBeNull();
+    expect(getDocument(b.id, storage)).toBeNull();
+    expectNoStoredDocuments(storage);
+    const raw = storage.getItem(DOCUMENTS_STORAGE_KEY) ?? "";
+    expect(raw).not.toContain("alpha text");
+    expect(raw).not.toContain("secret-note-a");
+  });
+
+  it("clears a full list of MAX_DOCUMENTS documents", () => {
+    for (let i = 0; i < MAX_DOCUMENTS; i++) {
+      saveDocument({ title: `D${i}`, text: `text ${i}`, source: "paste" }, storage);
+      tick();
+    }
+    expect(listDocuments(storage)).toHaveLength(MAX_DOCUMENTS);
+    clearDocuments(storage);
+    expect(listDocuments(storage)).toEqual([]);
+  });
+
+  it("leaves other keys in the same storage alone", () => {
+    storage.setItem("readaloud:settings:v1", '{"theme":"dark"}');
+    storage.setItem("unrelated", "keep me");
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    clearDocuments(storage);
+    expect(storage.getItem("readaloud:settings:v1")).toBe('{"theme":"dark"}');
+    expect(storage.getItem("unrelated")).toBe("keep me");
+    expect(listDocuments(storage)).toEqual([]);
+  });
+
+  it("is a harmless no-op when nothing is stored, and can be called twice", () => {
+    expect(() => clearDocuments(storage)).not.toThrow();
+    expect(listDocuments(storage)).toEqual([]);
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    clearDocuments(storage);
+    expect(() => clearDocuments(storage)).not.toThrow();
+    expect(listDocuments(storage)).toEqual([]);
+  });
+
+  it("clears corrupt stored data too", () => {
+    storage.setItem(DOCUMENTS_STORAGE_KEY, "{oops");
+    clearDocuments(storage);
+    expectNoStoredDocuments(storage);
+  });
+
+  it("allows saving again after clearing", () => {
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    clearDocuments(storage);
+    tick();
+    const fresh = saveDocument({ title: "A again", text: "a", source: "file" }, storage);
+    expect(listDocuments(storage)).toEqual([fresh]);
+    expect(fresh.createdAt).toBe(now);
+    expect(fresh.lastSentenceIndex).toBe(0);
+  });
+
+  it("uses the default storage (localStorage) when none is given", () => {
+    window.localStorage.clear();
+    try {
+      saveDocument({ title: "A", text: "a", source: "paste" });
+      saveDocument({ title: "B", text: "b", source: "paste" });
+      expect(listDocuments()).toHaveLength(2);
+      clearDocuments();
+      expect(listDocuments()).toEqual([]);
+      expectNoStoredDocuments(window.localStorage);
+    } finally {
+      window.localStorage.clear();
+    }
+  });
+
+  it("never throws when storage fails", () => {
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    storage.failWrites = true;
+    vi.spyOn(storage, "removeItem").mockImplementation(() => {
+      throw new Error("SecurityError: storage disabled");
+    });
+    expect(() => clearDocuments(storage)).not.toThrow();
+    storage.failReads = true;
+    expect(() => clearDocuments(storage)).not.toThrow();
   });
 });
 
