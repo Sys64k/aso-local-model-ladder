@@ -114,6 +114,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [progress, setProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [stats, setStats] = useState<{ words: number; sentences: number; paragraphs: number; minutes: number } | null>(null);
+  const statsAbortControllerRef = useRef<AbortController | null>(null);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -137,18 +138,37 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
 
   // Fetch text statistics when the pasted text changes and is at least 20 characters.
   useEffect(() => {
+    // Cancel any in-flight request
+    statsAbortControllerRef.current?.abort();
+
     const fetchStats = async () => {
       const text = normalizeText(pasteText);
       // Only show stats for valid text that's at least 20 characters (after normalization)
       if (text && text.length >= 20) {
-        const res = await fetch("/api/stats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-        const ok = res.ok;
-        const data = ok ? await res.json() : null;
-        setStats(ok ? data : null);
+        const controller = new AbortController();
+        statsAbortControllerRef.current = controller;
+        try {
+          const res = await fetch("/api/stats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+            signal: controller.signal,
+          });
+
+          if (!res.ok) {
+            setStats(null);
+            return;
+          }
+
+          try {
+            const data = await res.json();
+            setStats(data);
+          } catch {
+            setStats(null);
+          }
+        } catch {
+          setStats(null);
+        }
       } else {
         setStats(null);
       }
@@ -159,6 +179,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
 
     return () => {
       clearTimeout(timeoutId);
+      statsAbortControllerRef.current?.abort();
     };
   }, [pasteText]);
 

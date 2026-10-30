@@ -44,12 +44,12 @@ export async function POST(request: Request): Promise<Response> {
   // Missing or non-string text gives 400
   if (typeof text !== "string") return errorResponse("bad_request");
 
-  // Check for empty or whitespace-only text (after trimming)
-  const trimmed = text.trim();
-  if (!trimmed) return errorResponse("bad_request");
-
   // At most 200,000 characters, else 413
   if (text.length > MAX_CHARACTERS) return errorResponse("payload_too_large");
+
+  // Check for empty or whitespace-only text (after trimming) after size check
+  const trimmed = text.trim();
+  if (!trimmed) return errorResponse("bad_request");
 
   // Count words: split by whitespace and filter empty strings
   const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length;
