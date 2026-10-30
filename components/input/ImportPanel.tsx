@@ -141,21 +141,14 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
       const text = normalizeText(pasteText);
       // Only show stats for valid text that's at least 20 characters (after normalization)
       if (text && text.length >= 20) {
-        try {
-          const res = await fetch("/api/stats", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setStats(data);
-          } else {
-            setStats(null);
-          }
-        } catch {
-          setStats(null);
-        }
+        const res = await fetch("/api/stats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const ok = res.ok;
+        const data = ok ? await res.json() : null;
+        setStats(ok ? data : null);
       } else {
         setStats(null);
       }

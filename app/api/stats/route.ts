@@ -48,8 +48,8 @@ export async function POST(request: Request): Promise<Response> {
   const trimmed = text.trim();
   if (!trimmed) return errorResponse("bad_request");
 
-  // Too long gives 413
-  if (text.length >= MAX_CHARACTERS) return errorResponse("payload_too_large");
+  // At most 200,000 characters, else 413
+  if (text.length > MAX_CHARACTERS) return errorResponse("payload_too_large");
 
   // Count words: split by whitespace and filter empty strings
   const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length;

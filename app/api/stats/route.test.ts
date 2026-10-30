@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { POST, runtime } from "./route";
 
 function post(body: unknown, init: RequestInit = {}) {
@@ -71,21 +71,21 @@ describe("POST /api/stats", () => {
     expect(await res.json()).toEqual({ error: "bad_request" });
   });
 
+  it("returns 200 for text at the 200,000 character limit", async () => {
+    // Create text with exactly 100,000 words and 200,000 characters
+    const text = "x ".repeat(100_000);
+    const res = await POST(post({ text }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      words: 100_000,
+      sentences: 1,
+      paragraphs: 1,
+      minutes: 500,
+    });
+  });
+
   it("returns 413 for text over 200,000 characters", async () => {
-    const text = "x".repeat(200_000);
-    const res = await POST(post({ text }));
-    expect(res.status).toBe(413);
-    expect(await res.json()).toEqual({ error: "payload_too_large" });
-  });
-
-  it("returns 413 for text exactly at the limit", async () => {
-    const text = "x".repeat(200_000);
-    const res = await POST(post({ text }));
-    expect(res.status).toBe(413);
-    expect(await res.json()).toEqual({ error: "payload_too_large" });
-  });
-
-  it("returns 413 for text slightly over the limit", async () => {
     const text = "x".repeat(200_001);
     const res = await POST(post({ text }));
     expect(res.status).toBe(413);
