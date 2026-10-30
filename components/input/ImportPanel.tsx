@@ -113,6 +113,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [stats, setStats] = useState<{ words: number; sentences: number; paragraphs: number; minutes: number } | null>(null);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -133,6 +134,40 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
       aborts.current?.abort();
     };
   }, []);
+
+  // Fetch text statistics when the pasted text changes and is at least 20 characters.
+  useEffect(() => {
+    const fetchStats = async () => {
+      const text = normalizeText(pasteText);
+      // Only show stats for valid text that's at least 20 characters (after normalization)
+      if (text && text.length >= 20) {
+        try {
+          const res = await fetch("/api/stats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setStats(data);
+          } else {
+            setStats(null);
+          }
+        } catch {
+          setStats(null);
+        }
+      } else {
+        setStats(null);
+      }
+    };
+
+    // Use a small timeout to avoid excessive requests during typing
+    const timeoutId = setTimeout(fetchStats, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [pasteText]);
 
   // Keep keyboard focus somewhere sensible while controls are disabled.
   useEffect(() => {
@@ -449,6 +484,12 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
                 rows={8}
                 className="block min-h-48 w-full rounded-lg border-2 border-current bg-transparent p-3 text-lg"
               />
+              {stats && (
+                <p className="text-sm text-muted-foreground">
+                  {stats.words} words · {stats.sentences} sentences ·{" "}
+                  {stats.paragraphs} paragraphs · ~{stats.minutes} minute read
+                </p>
+              )}
               <button type="submit" className={PRIMARY_BUTTON}>
                 Read this text
               </button>
