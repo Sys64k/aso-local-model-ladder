@@ -44,17 +44,13 @@ export function exportBackup(storage?: Storage | null): string {
  */
 export function importBackup(json: string, storage?: Storage | null): SavedDocument[] {
   try {
-    const backup: unknown = JSON.parse(json);
+    const backup = JSON.parse(json) as { documents: unknown; settings: unknown };
     if (
-      typeof backup !== "object" ||
-      backup === null ||
-      !("documents" in backup) ||
-      !("settings" in backup) ||
       !Array.isArray(backup.documents) ||
-      typeof backup.settings !== "object" ||
-      backup.settings === null
+      backup.settings === null ||
+      Array.isArray(backup.settings)
     ) {
-      throw new Error("Invalid backup format: must contain 'documents' and 'settings'.");
+      throw new Error("Invalid backup format: must contain 'documents' (array) and 'settings' (object).");
     }
 
     // Merge documents: imported version wins, keep at most MAX_DOCUMENTS (newest first)
@@ -65,7 +61,12 @@ export function importBackup(json: string, storage?: Storage | null): SavedDocum
     // Load imported docs into a map (later imports override earlier ones for same id)
     for (const doc of importedDocs) {
       if (isValidDocument(doc)) {
-        importedMap.set(doc.id, { ...doc });
+        // Truncate note to NOTE_MAX_LENGTH if present
+        const importedDoc = { ...doc };
+        if (importedDoc.note && importedDoc.note.length > NOTE_MAX_LENGTH) {
+          importedDoc.note = importedDoc.note.slice(0, NOTE_MAX_LENGTH);
+        }
+        importedMap.set(doc.id, importedDoc);
       }
     }
 

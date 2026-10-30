@@ -84,10 +84,10 @@ type NumericKey = keyof typeof SETTING_LIMITS;
 
 function num(value: unknown, key: NumericKey): number {
   const { min, max } = SETTING_LIMITS[key];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_SETTINGS[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.min(max, Math.max(min, value));
   }
-  return Math.min(max, Math.max(min, value));
+  return DEFAULT_SETTINGS[key];
 }
 
 function oneOf<T extends string>(
@@ -108,19 +108,19 @@ export function sanitizeSettings(input: unknown): ReaderSettings {
       : {};
   const d = DEFAULT_SETTINGS;
   return {
-    theme: o.theme ? oneOf(o.theme, THEMES, d.theme) : d.theme,
-    fontSize: o.fontSize ? num(o.fontSize, "fontSize") : d.fontSize,
-    lineHeight: o.lineHeight ? num(o.lineHeight, "lineHeight") : d.lineHeight,
-    letterSpacing: o.letterSpacing ? num(o.letterSpacing, "letterSpacing") : d.letterSpacing,
-    wordSpacing: o.wordSpacing ? num(o.wordSpacing, "wordSpacing") : d.wordSpacing,
-    fontFamily: o.fontFamily ? oneOf(o.fontFamily, FONT_CHOICES, d.fontFamily) : d.fontFamily,
-    rate: o.rate ? num(o.rate, "rate") : d.rate,
-    pitch: o.pitch ? num(o.pitch, "pitch") : d.pitch,
-    volume: o.volume ? num(o.volume, "volume") : d.volume,
+    theme: o.theme !== undefined ? oneOf(o.theme, THEMES, d.theme) : d.theme,
+    fontSize: o.fontSize !== undefined ? num(o.fontSize, "fontSize") : d.fontSize,
+    lineHeight: o.lineHeight !== undefined ? num(o.lineHeight, "lineHeight") : d.lineHeight,
+    letterSpacing: o.letterSpacing !== undefined ? num(o.letterSpacing, "letterSpacing") : d.letterSpacing,
+    wordSpacing: o.wordSpacing !== undefined ? num(o.wordSpacing, "wordSpacing") : d.wordSpacing,
+    fontFamily: o.fontFamily !== undefined ? oneOf(o.fontFamily, FONT_CHOICES, d.fontFamily) : d.fontFamily,
+    rate: o.rate !== undefined ? num(o.rate, "rate") : d.rate,
+    pitch: o.pitch !== undefined ? num(o.pitch, "pitch") : d.pitch,
+    volume: o.volume !== undefined ? num(o.volume, "volume") : d.volume,
     voiceURI:
       typeof o.voiceURI === "string" && o.voiceURI.length > 0 ? o.voiceURI : null,
-    highlightMode: o.highlightMode ? oneOf(o.highlightMode, HIGHLIGHT_MODES, d.highlightMode) : d.highlightMode,
-    viewMode: o.viewMode ? oneOf(o.viewMode, VIEW_MODES, d.viewMode) : d.viewMode,
+    highlightMode: o.highlightMode !== undefined ? oneOf(o.highlightMode, HIGHLIGHT_MODES, d.highlightMode) : d.highlightMode,
+    viewMode: o.viewMode !== undefined ? oneOf(o.viewMode, VIEW_MODES, d.viewMode) : d.viewMode,
     autoScroll: typeof o.autoScroll === "boolean" ? o.autoScroll : d.autoScroll,
   };
 }
@@ -128,13 +128,13 @@ export function sanitizeSettings(input: unknown): ReaderSettings {
 /** Load settings; falls back to defaults on missing storage, missing key or corrupt JSON. */
 export function loadSettings(storage?: Storage | null): ReaderSettings {
   const store = storage ?? getDefaultStorage();
-  if (!store) return sanitizeSettings({});
+  if (!store) return DEFAULT_SETTINGS;
   try {
     const raw = store.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) return sanitizeSettings({});
+    if (raw == null) return DEFAULT_SETTINGS;
     return sanitizeSettings(JSON.parse(raw));
   } catch {
-    return sanitizeSettings({});
+    return DEFAULT_SETTINGS;
   }
 }
 
