@@ -351,6 +351,181 @@ describe("web page", () => {
   });
 });
 
+describe("text statistics", () => {
+  const STATS_LABEL = "Text statistics";
+  const LONG = "The quick brown fox jumps over the lazy dog.";
+
+  function statsResponse(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  function paste(value: string) {
+    fireEvent.change(screen.getByLabelText("Text to read"), { target: { value } });
+  }
+
+  /** Give a (debounced) request time to start and finish. */
+  async function settle(ms = 700) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+  }
+
+  function statsCalls() {
+    return fetchMock.mock.calls.filter(([endpoint]) => endpoint === "/api/stats");
+  }
+
+  function expectNumbers(el: HTMLElement, n: { words: number; sentences: number; paragraphs: number; minutes: number }) {
+    expect(el).toHaveTextContent(new RegExp(`\\b${n.words}\\s+words?\\b`, "i"));
+    expect(el).toHaveTextContent(new RegExp(`\\b${n.sentences}\\s+sentences?\\b`, "i"));
+    expect(el).toHaveTextContent(new RegExp(`\\b${n.paragraphs}\\s+paragraphs?\\b`, "i"));
+    expect(el).toHaveTextContent(new RegExp(`\\b${n.minutes}\\s+min(ute)?s?\\b`, "i"));
+  }
+
+  it("posts pasted text to /api/stats and shows the numbers it answers", async () => {
+    // Numbers deliberately differ from the real text: they must come from the route.
+    const numbers = { words: 345, sentences: 17, paragraphs: 4, minutes: 2 };
+    fetchMock.mockResolvedValue(statsResponse(numbers));
+    setup();
+    paste(LONG);
+    const stats = await screen.findByLabelText(STATS_LABEL);
+    expectNumbers(stats, numbers);
+
+    const calls = statsCalls();
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    const [, init] = calls[calls.length - 1];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ text: LONG });
+  });
+
+  it("shows the numbers for text of exactly 20 characters", async () => {
+    const numbers = { words: 3, sentences: 1, paragraphs: 1, minutes: 1 };
+    fetchMock.mockResolvedValue(statsResponse(numbers));
+    setup();
+    const text = "Exactly twenty chars";
+    expect(text).toHaveLength(20);
+    paste(text);
+    expectNumbers(await screen.findByLabelText(STATS_LABEL), numbers);
+    expect(JSON.parse(statsCalls().at(-1)![1].body)).toEqual({ text });
+  });
+
+  it("shows nothing and sends nothing for text under 20 characters", async () => {
+    fetchMock.mockResolvedValue(statsResponse({ words: 3, sentences: 1, paragraphs: 1, minutes: 1 }));
+    setup();
+    const text = "Nineteen characters";
+    expect(text).toHaveLength(19);
+    paste(text);
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(STATS_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("shows nothing before any text is pasted", async () => {
+    setup();
+    await settle(100);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(STATS_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("hides the numbers again when the text becomes too short", async () => {
+    fetchMock.mockResolvedValue(statsResponse({ words: 9, sentences: 1, paragraphs: 1, minutes: 1 }));
+    setup();
+    paste(LONG);
+    await screen.findByLabelText(STATS_LABEL);
+    paste("Too short");
+    await waitFor(() => expect(screen.queryByLabelText(STATS_LABEL)).not.toBeInTheDocument());
+    await settle();
+    expect(screen.queryByLabelText(STATS_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("shows the numbers for the latest text when answers arrive out of order", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const textA = "First version of the pasted text.";
+    const textB = "Second, longer version of the pasted text.";
+    fetchMock.mockImplementation((_endpoint: string, init: RequestInit) => {
+      const { text } = JSON.parse(String(init.body));
+      return text === textA ? first.promise : second.promise;
+    });
+    setup();
+    paste(textA);
+    await waitFor(() => expect(statsCalls().length).toBeGreaterThanOrEqual(1));
+    paste(textB);
+    await waitFor(() =>
+      expect(statsCalls().some(([, init]) => JSON.parse(init.body).text === textB)).toBe(true),
+    );
+    const numbersB = { words: 7, sentences: 1, paragraphs: 1, minutes: 1 };
+    await act(async () => {
+      second.resolve(statsResponse(numbersB));
+    });
+    expectNumbers(await screen.findByLabelText(STATS_LABEL), numbersB);
+    await act(async () => {
+      first.resolve(statsResponse({ words: 666, sentences: 66, paragraphs: 6, minutes: 4 }));
+    });
+    await settle(100);
+    const stats = screen.getByLabelText(STATS_LABEL);
+    expectNumbers(stats, numbersB);
+    expect(stats).not.toHaveTextContent(/666/);
+  });
+
+  it("does not make the panel busy or import while the numbers load", async () => {
+    const pending = deferred<Response>();
+    fetchMock.mockReturnValue(pending.promise);
+    const { onImport } = setup();
+    paste(LONG);
+    await waitFor(() => expect(statsCalls().length).toBeGreaterThanOrEqual(1));
+    expect(screen.getByRole("region", { name: "Add text to read" })).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByRole("button", { name: "Read this text" })).toBeEnabled();
+    expect(screen.getByLabelText("Text to read")).toBeEnabled();
+    expect(onImport).not.toHaveBeenCalled();
+    await act(async () => {
+      pending.resolve(statsResponse({ words: 9, sentences: 1, paragraphs: 1, minutes: 1 }));
+    });
+  });
+
+  it("shows no numbers and no error when the request fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    setup();
+    paste(LONG);
+    await waitFor(() => expect(statsCalls().length).toBeGreaterThanOrEqual(1));
+    await settle();
+    expect(screen.queryByLabelText(STATS_LABEL)).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("");
+  });
+
+  it.each([
+    ["a 500 answer", () => statsResponse({ error: "boom" }, 500)],
+    ["a 413 answer", () => statsResponse({ error: "too_large" }, 413)],
+    ["a non-JSON answer", () => new Response("<html>oops</html>", { status: 200 })],
+    ["an answer without numbers", () => statsResponse({ hello: "world" })],
+  ])("shows no numbers and no error for %s", async (_label, make) => {
+    fetchMock.mockImplementation(async () => make());
+    setup();
+    paste(LONG);
+    await waitFor(() => expect(statsCalls().length).toBeGreaterThanOrEqual(1));
+    await settle();
+    expect(screen.queryByLabelText(STATS_LABEL)).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("still imports pasted text when the stats request fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { user, onImport } = setup();
+    paste(LONG);
+    await waitFor(() => expect(statsCalls().length).toBeGreaterThanOrEqual(1));
+    await user.click(screen.getByRole("button", { name: "Read this text" }));
+    expect(onImport).toHaveBeenCalledWith({ title: LONG, text: LONG, source: "paste" });
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+  });
+});
+
 describe("progress, status and cancel", () => {
   it("has a polite status region and an alert region", () => {
     setup();
