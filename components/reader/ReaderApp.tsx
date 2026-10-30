@@ -258,6 +258,15 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
     [storage, announce],
   );
 
+  const handleClearRecentDocuments = useCallback(
+    () => {
+      setDocuments([]);
+      announce("Cleared all recent documents");
+      recentHeadingRef.current?.focus();
+    },
+    [announce],
+  );
+
   const stopDocument = useCallback(() => {
     if (state.status !== "idle") stopRequested.current = true;
     speech.stop();
@@ -472,6 +481,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
                 documents={documents}
                 onOpen={handleOpenRecent}
                 onDelete={handleDelete}
+                onClear={handleClearRecentDocuments}
                 headingRef={recentHeadingRef}
               />
             </div>

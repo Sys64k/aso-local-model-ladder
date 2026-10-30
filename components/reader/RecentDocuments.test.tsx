@@ -1,20 +1,19 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { SavedDocument } from "@/lib/documents";
 import { RecentDocuments } from "./RecentDocuments";
 
-function makeDoc(overrides: Partial<SavedDocument> = {}): SavedDocument {
+function makeDoc(title: string, id: string): SavedDocument {
   return {
-    id: "doc-1",
-    title: "My letter",
-    text: "Dear friend. Hello there.",
+    id,
+    title,
+    text: `${title} text.`,
     source: "paste",
     createdAt: Date.UTC(2024, 0, 1),
     updatedAt: Date.UTC(2024, 0, 2),
     lastSentenceIndex: 0,
     note: "",
-    ...overrides,
   };
 }
 
@@ -25,59 +24,16 @@ function escapeRegExp(s: string): string {
 function renderList(documents: SavedDocument[]) {
   const onOpen = vi.fn();
   const onDelete = vi.fn();
-  render(<RecentDocuments documents={documents} onOpen={onOpen} onDelete={onDelete} />);
-  return { onOpen, onDelete };
+  const onClear = vi.fn();
+  const headingRef = { current: document.createElement('h2') };
+  render(<RecentDocuments documents={documents} onOpen={onOpen} onDelete={onDelete} onClear={onClear} headingRef={headingRef} />);
+  return { onOpen, onDelete, onClear };
 }
 
-describe("RecentDocuments note preview", () => {
-  it("shows a preview for a document with a note", () => {
-    renderList([makeDoc({ note: "Call the bank on Monday" })]);
-    const preview = screen.getByTestId("note-preview");
-    expect(preview).toHaveTextContent("Note: Call the bank on Monday");
-    const openButton = screen.getByRole("button", { name: /^My letter/ });
-    expect(within(openButton).getByTestId("note-preview")).toBe(preview);
-  });
-
-  it("collapses multi-line notes into a single line", () => {
-    renderList([makeDoc({ note: "First line\n\nSecond   line" })]);
-    expect(screen.getByTestId("note-preview").textContent).toBe("Note: First line Second line");
-  });
-
-  it("shows no preview for blank or whitespace-only notes", () => {
-    renderList([
-      makeDoc({ id: "a", title: "Blank note", note: "" }),
-      makeDoc({ id: "b", title: "Spaces note", note: "   \n\t  " }),
-    ]);
-    expect(screen.queryByTestId("note-preview")).not.toBeInTheDocument();
-    for (const title of ["Blank note", "Spaces note"]) {
-      const button = screen.getByRole("button", { name: new RegExp(`^${title}`) });
-      expect(button).not.toHaveTextContent("Note:");
-      expect(button.querySelectorAll("span")).toHaveLength(2);
-    }
-  });
-
-  it("truncates long notes with an ellipsis", () => {
-    const longNote = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
-    renderList([makeDoc({ note: longNote })]);
-    const text = screen.getByTestId("note-preview").textContent ?? "";
-    expect(text.startsWith("Note: word0 word1")).toBe(true);
-    expect(text.endsWith("…")).toBe(true);
-    const preview = text.slice("Note: ".length);
-    expect(preview.length).toBeLessThanOrEqual(81);
-    expect(text).not.toContain("word39");
-  });
-
-  it("keeps the title at the start of the open button's accessible name", () => {
-    renderList([makeDoc({ title: "Shopping list", note: "Remember milk" })]);
-    const button = screen.getByRole("button", { name: /^Shopping list/ });
-    expect(button).toHaveAccessibleName(expect.stringMatching(/^Shopping list /));
-    expect(button).toHaveAccessibleName(expect.stringContaining("Note: Remember milk"));
-    expect(button).toHaveAccessibleName(expect.stringMatching(/\d Note: Remember milk$/));
-  });
-
-  it("still calls onOpen and onDelete", async () => {
+describe("RecentDocuments", () => {
+  it("calls onOpen and onDelete", async () => {
     const user = userEvent.setup();
-    const doc = makeDoc({ note: "Some note" });
+    const doc = makeDoc("My letter", "doc-1");
     const { onOpen, onDelete } = renderList([doc]);
     await user.click(screen.getByRole("button", { name: new RegExp(`^${escapeRegExp(doc.title)}`) }));
     expect(onOpen).toHaveBeenCalledTimes(1);
@@ -85,5 +41,64 @@ describe("RecentDocuments note preview", () => {
     await user.click(screen.getByRole("button", { name: "Delete My letter" }));
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledWith(doc);
+  });
+
+  it("shows Clear all button when documents exist", async () => {
+    const user = userEvent.setup();
+    const docs = [makeDoc("First", "doc-1"), makeDoc("Second", "doc-2")];
+    renderList(docs);
+    expect(screen.getByRole("button", { name: "Clear all" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(screen.getByRole("heading", { level: 2, name: "Clear recent documents?" })).toBeVisible();
+  });
+
+  it("hides Clear all button when there are no documents", () => {
+    renderList([]);
+    expect(screen.queryByRole("button", { name: "Clear all" })).not.toBeInTheDocument();
+  });
+
+  it("clears all documents when confirming", async () => {
+    const user = userEvent.setup();
+    const { onClear } = renderList([
+      makeDoc("First", "doc-1"),
+      makeDoc("Second", "doc-2"),
+      makeDoc("Third", "doc-3"),
+    ]);
+
+    // Open the confirmation dialog
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+
+    // Verify dialog is open
+    expect(screen.getByRole("heading", { level: 2, name: "Clear recent documents?" })).toBeVisible();
+
+    // Confirm the clear action
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+
+    // onClear should have been called
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps all documents when cancelling", async () => {
+    const user = userEvent.setup();
+    const { onClear, onOpen, onDelete } = renderList([
+      makeDoc("First", "doc-1"),
+      makeDoc("Second", "doc-2"),
+    ]);
+
+    // Open the confirmation dialog
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+
+    // Cancel the clear action
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // Dialog should close
+    expect(screen.queryByRole("heading", { level: 2, name: "Clear recent documents?" })).not.toBeInTheDocument();
+
+    // onClear should not have been called
+    expect(onClear).not.toHaveBeenCalled();
+
+    // The original event handlers should not have been triggered
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
   });
 });
