@@ -128,7 +128,7 @@ describe("importBackup", () => {
     expect(result[0].title).toBe("Imported");
     expect(result[0].note).toBe("Imported note");
     expect(storage.getItem(DOCUMENTS_STORAGE_KEY)).toContain("Imported text");
-    expect(storage.getItem(SETTINGS_STORAGE_KEY)).toContain("30");
+    expect(JSON.parse(storage.getItem(SETTINGS_STORAGE_KEY)!).fontSize).toBe(30);
   });
 
   it("round-trips: export then import into empty storage gives the same data", () => {
@@ -198,8 +198,9 @@ describe("importBackup", () => {
     const settings = DEFAULT_SETTINGS;
 
     storage.setItem(DOCUMENTS_STORAGE_KEY, JSON.stringify(existingDocs));
+    storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS));
 
-    const backupJson = JSON.stringify({ documents: importedDocs, settings });
+    const backupJson = JSON.stringify({ documents: importedDocs, settings: DEFAULT_SETTINGS });
     const result = importBackup(backupJson, storage);
 
     expect(result).toHaveLength(2);

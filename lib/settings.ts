@@ -108,19 +108,19 @@ export function sanitizeSettings(input: unknown): ReaderSettings {
       : {};
   const d = DEFAULT_SETTINGS;
   return {
-    theme: oneOf(o.theme, THEMES, d.theme),
-    fontSize: num(o.fontSize, "fontSize"),
-    lineHeight: num(o.lineHeight, "lineHeight"),
-    letterSpacing: num(o.letterSpacing, "letterSpacing"),
-    wordSpacing: num(o.wordSpacing, "wordSpacing"),
-    fontFamily: oneOf(o.fontFamily, FONT_CHOICES, d.fontFamily),
-    rate: num(o.rate, "rate"),
-    pitch: num(o.pitch, "pitch"),
-    volume: num(o.volume, "volume"),
+    theme: o.theme ? oneOf(o.theme, THEMES, d.theme) : d.theme,
+    fontSize: o.fontSize ? num(o.fontSize, "fontSize") : d.fontSize,
+    lineHeight: o.lineHeight ? num(o.lineHeight, "lineHeight") : d.lineHeight,
+    letterSpacing: o.letterSpacing ? num(o.letterSpacing, "letterSpacing") : d.letterSpacing,
+    wordSpacing: o.wordSpacing ? num(o.wordSpacing, "wordSpacing") : d.wordSpacing,
+    fontFamily: o.fontFamily ? oneOf(o.fontFamily, FONT_CHOICES, d.fontFamily) : d.fontFamily,
+    rate: o.rate ? num(o.rate, "rate") : d.rate,
+    pitch: o.pitch ? num(o.pitch, "pitch") : d.pitch,
+    volume: o.volume ? num(o.volume, "volume") : d.volume,
     voiceURI:
       typeof o.voiceURI === "string" && o.voiceURI.length > 0 ? o.voiceURI : null,
-    highlightMode: oneOf(o.highlightMode, HIGHLIGHT_MODES, d.highlightMode),
-    viewMode: oneOf(o.viewMode, VIEW_MODES, d.viewMode),
+    highlightMode: o.highlightMode ? oneOf(o.highlightMode, HIGHLIGHT_MODES, d.highlightMode) : d.highlightMode,
+    viewMode: o.viewMode ? oneOf(o.viewMode, VIEW_MODES, d.viewMode) : d.viewMode,
     autoScroll: typeof o.autoScroll === "boolean" ? o.autoScroll : d.autoScroll,
   };
 }
@@ -128,22 +128,22 @@ export function sanitizeSettings(input: unknown): ReaderSettings {
 /** Load settings; falls back to defaults on missing storage, missing key or corrupt JSON. */
 export function loadSettings(storage?: Storage | null): ReaderSettings {
   const store = storage ?? getDefaultStorage();
-  if (!store) return { ...DEFAULT_SETTINGS };
+  if (!store) return sanitizeSettings({});
   try {
     const raw = store.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
+    if (!raw) return sanitizeSettings({});
     return sanitizeSettings(JSON.parse(raw));
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return sanitizeSettings({});
   }
 }
 
 /** Save settings. Never throws (quota exceeded / private mode are ignored). */
 export function saveSettings(s: ReaderSettings, storage?: Storage | null): void {
-  const store = storage ?? getDefaultStorage();
-  if (!store) return;
+  if (!storage) return;
   try {
-    store.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(sanitizeSettings(s)));
+    const sanitized = sanitizeSettings(s);
+    storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(sanitized));
   } catch {
     // ignore
   }
