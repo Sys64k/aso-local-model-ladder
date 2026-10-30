@@ -1,5 +1,6 @@
 import type { SavedDocument } from "./documents";
 import type { ReaderSettings } from "./settings";
+import type { Storage } from "./storage";
 import {
   MAX_DOCUMENTS,
   NOTE_MAX_LENGTH,
@@ -85,7 +86,14 @@ export function importBackup(json: string, storage?: Storage | null): SavedDocum
 
     // Sanitize and save settings
     const sanitizedSettings = sanitizeSettings(backup.settings);
-    saveSettings(sanitizedSettings, storage);
+    if (!sanitizedSettings) return finalDocs;
+    try {
+      const store = storage ?? getDefaultStorage();
+      if (!store) return finalDocs;
+      store.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(sanitizedSettings));
+    } catch {
+      // Ignore quota exceeded
+    }
 
     return finalDocs;
   } catch (err) {
@@ -99,7 +107,7 @@ export function importBackup(json: string, storage?: Storage | null): SavedDocum
 // --- Helper functions (not exported) ---
 
 function getDocuments(storage?: Storage | null): SavedDocument[] {
-  const store = storage ?? (typeof window !== "undefined" ? window.localStorage : null);
+  const store = storage ?? getDefaultStorage();
   if (!store) return [];
   try {
     const raw = store.getItem(DOCUMENTS_STORAGE_KEY);
@@ -113,7 +121,7 @@ function getDocuments(storage?: Storage | null): SavedDocument[] {
 }
 
 function saveDocuments(storage?: Storage | null, docs: SavedDocument[] = []): void {
-  const store = storage ?? (typeof window !== "undefined" ? window.localStorage : null);
+  const store = storage ?? getDefaultStorage();
   if (!store) return;
   try {
     store.setItem(DOCUMENTS_STORAGE_KEY, JSON.stringify(docs));
