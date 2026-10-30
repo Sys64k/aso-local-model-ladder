@@ -5,6 +5,7 @@ import {
   MAX_DOCUMENTS,
   NOTE_MAX_LENGTH,
   NOTE_PREVIEW_LENGTH,
+  clearDocuments,
   deleteDocument,
   deriveTitle,
   getDocument,
@@ -121,6 +122,15 @@ describe("document store", () => {
     deleteDocument(a.id, storage);
     expect(listDocuments(storage).map((d) => d.id)).toEqual([b.id]);
     expect(() => deleteDocument("missing", storage)).not.toThrow();
+  });
+
+  it("clears all documents", () => {
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    saveDocument({ title: "B", text: "b", source: "paste" }, storage);
+    saveDocument({ title: "C", text: "c", source: "paste" }, storage);
+    clearDocuments(storage);
+    expect(listDocuments(storage)).toEqual([]);
+    expect(storage.getItem(DOCUMENTS_STORAGE_KEY)).toEqual("[]");
   });
 
   it("ignores corrupt or malformed stored data", () => {
