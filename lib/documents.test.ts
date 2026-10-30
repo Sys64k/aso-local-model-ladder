@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryStorage } from "@/tests/fakes/storage";
 import {
   DOCUMENTS_STORAGE_KEY,
+  TITLE_MAX_LENGTH,
   MAX_DOCUMENTS,
   NOTE_MAX_LENGTH,
   NOTE_PREVIEW_LENGTH,
@@ -54,6 +55,23 @@ describe("document store", () => {
   it("derives a title when none is given", () => {
     const doc = saveDocument({ title: "  ", text: "First sentence. Second.", source: "file" }, storage);
     expect(doc.title).toBe("First sentence.");
+  });
+
+  it("tidies titles by trimming and collapsing whitespace", () => {
+    const doc = saveDocument({ title: "  My   doc  ", text: "Hello world.", source: "paste" }, storage);
+    expect(doc.title).toBe("My doc");
+  });
+
+  it("handles titles that are only whitespace", () => {
+    const doc = saveDocument({ title: "   ", text: "First sentence.", source: "file" }, storage);
+    expect(doc.title).toBe("First sentence.");
+  });
+
+  it("cuts long titles at TITLE_MAX_LENGTH after tidying", () => {
+    const longTitle = "This is a very long title that goes on and on and on and extends well past the sixty character limit.";
+    const doc = saveDocument({ title: longTitle, text: "Content.", source: "paste" }, storage);
+    expect(doc.title.length).toBeLessThanOrEqual(TITLE_MAX_LENGTH);
+    expect(doc.title).toContain("…");
   });
 
   it("lists newest first", () => {

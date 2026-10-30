@@ -99,7 +99,8 @@ export function saveDocument(
   const store = resolve(storage);
   const docs = listDocuments(store);
   const now = Date.now();
-  const title = input.title?.trim() || deriveTitle(input.text);
+  const tidy = tidyTitle(input.title);
+  const title = tidy || deriveTitle(input.text);
   const existing = docs.find((d) => d.text === input.text);
   let doc: SavedDocument;
   if (existing) {
@@ -191,6 +192,19 @@ export function deleteDocument(id: string, storage?: Storage | null): void {
 }
 
 /** First ~60 chars of the first sentence, cut at a word boundary, with an ellipsis. */
+export function tidyTitle(title: string): string {
+  // Trim surrounding whitespace and collapse runs of whitespace inside to one space
+  const collapsed = (title ?? "").replace(/\s+/g, " ").trim();
+  // If the result is empty, return an empty string (will be replaced by deriveTitle)
+  if (!collapsed) return "";
+  // Cut at TITLE_MAX_LENGTH with word boundary and ellipsis
+  if (collapsed.length <= TITLE_MAX_LENGTH) return collapsed;
+  const slice = collapsed.slice(0, TITLE_MAX_LENGTH + 1);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : collapsed.slice(0, TITLE_MAX_LENGTH);
+  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+}
+
 export function deriveTitle(text: string): string {
   const clean = (text ?? "").replace(/\s+/g, " ").trim();
   if (!clean) return "Untitled";
