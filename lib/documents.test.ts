@@ -155,6 +155,112 @@ describe("document store", () => {
   });
 });
 
+describe("saveDocument title tidying", () => {
+  const text = "First sentence. Second.";
+
+  it("trims a given title and collapses inner whitespace to one space", () => {
+    const doc = saveDocument({ title: "  My   doc  ", text, source: "paste" }, storage);
+    expect(doc.title).toBe("My doc");
+    expect(getDocument(doc.id, storage)?.title).toBe("My doc");
+    expect(listDocuments(storage)[0].title).toBe("My doc");
+  });
+
+  it("collapses tabs and newlines inside a title", () => {
+    const doc = saveDocument({ title: "\tChapter\n\n one \t notes\r\n", text, source: "file" }, storage);
+    expect(doc.title).toBe("Chapter one notes");
+  });
+
+  it("leaves an already tidy title unchanged", () => {
+    expect(saveDocument({ title: "My doc", text, source: "paste" }, storage).title).toBe("My doc");
+  });
+
+  it("falls back to deriveTitle(text) for an empty or whitespace-only title", () => {
+    expect(saveDocument({ title: "", text: "a. b.", source: "paste" }, storage).title).toBe(
+      deriveTitle("a. b."),
+    );
+    for (const [i, blank] of [" ", "   ", "\n\t \r\n"].entries()) {
+      const t = `Blank ${i} sentence. More text.`;
+      const doc = saveDocument({ title: blank, text: t, source: "paste" }, storage);
+      expect(doc.title).toBe(deriveTitle(t));
+      expect(doc.title).toBe(`Blank ${i} sentence.`);
+    }
+    expect(saveDocument({ title: "  ", text: "   ", source: "paste" }, storage).title).toBe(
+      "Untitled",
+    );
+  });
+
+  it("never splits a given title into sentences", () => {
+    const doc = saveDocument({ title: "Chapter 1. The beginning.", text, source: "paste" }, storage);
+    expect(doc.title).toBe("Chapter 1. The beginning.");
+  });
+
+  it("keeps a title of exactly 60 characters (after tidying) uncut", () => {
+    const exact = "x".repeat(60);
+    expect(saveDocument({ title: exact, text: "t1", source: "paste" }, storage).title).toBe(exact);
+
+    const words = `${"abcd ".repeat(11)}abcde`;
+    expect(words).toHaveLength(60);
+    const spaced = `   ${words.replace(/ /g, "   ")}   `;
+    expect(spaced.length).toBeGreaterThan(60);
+    expect(saveDocument({ title: spaced, text: "t2", source: "paste" }, storage).title).toBe(words);
+  });
+
+  it("cuts a title of 61 characters at a word boundary with an ellipsis", () => {
+    const title = `${"abcd ".repeat(12)}x`;
+    expect(title).toHaveLength(61);
+    const doc = saveDocument({ title, text, source: "paste" }, storage);
+    expect(doc.title).toBe(`${"abcd ".repeat(12).trim()}…`);
+    expect(getDocument(doc.id, storage)?.title).toBe(doc.title);
+  });
+
+  it("cuts a long title the way deriveTitle cuts: 60 characters plus …", () => {
+    const title =
+      "This is a rather long first sentence that keeps going well past the sixty character limit.";
+    const doc = saveDocument({ title, text, source: "paste" }, storage);
+    expect(doc.title).toBe("This is a rather long first sentence that keeps going well…");
+    expect(doc.title).toBe(deriveTitle(title));
+    expect(doc.title.length).toBeLessThanOrEqual(61);
+  });
+
+  it("hard-cuts a single very long word at 60 characters plus …", () => {
+    const doc = saveDocument({ title: "y".repeat(100), text, source: "paste" }, storage);
+    expect(doc.title).toBe(`${"y".repeat(60)}…`);
+    expect(doc.title).toBe(deriveTitle("y".repeat(100)));
+  });
+
+  it("strips trailing punctuation before the ellipsis", () => {
+    const title = `${"word, ".repeat(10)}end`;
+    const doc = saveDocument({ title, text, source: "paste" }, storage);
+    expect(doc.title).toBe(`${"word, ".repeat(9)}word…`);
+    expect(doc.title).toBe(deriveTitle(title));
+  });
+
+  it("cuts a long multi-sentence title without splitting it into sentences", () => {
+    const title = "Short start. Then a much longer second sentence that runs well past the limit.";
+    const doc = saveDocument({ title, text, source: "paste" }, storage);
+    expect(doc.title).toBe("Short start. Then a much longer second sentence that runs…");
+    expect(doc.title).not.toBe(deriveTitle(title));
+  });
+
+  it("collapses whitespace before measuring and cutting a long title", () => {
+    const title = `  This   is a rather long first\n\nsentence that keeps going   well past the sixty character limit.  `;
+    const doc = saveDocument({ title, text, source: "paste" }, storage);
+    expect(doc.title).toBe("This is a rather long first sentence that keeps going well…");
+  });
+
+  it("tidies the title when re-saving identical text", () => {
+    const first = saveDocument({ title: "Old", text: "Same text.", source: "paste" }, storage);
+    tick();
+    const again = saveDocument(
+      { title: `  New \n  ${"z".repeat(80)}`, text: "Same text.", source: "file" },
+      storage,
+    );
+    expect(again.id).toBe(first.id);
+    expect(again.title).toBe("New…");
+    expect(getDocument(first.id, storage)?.title).toBe("New…");
+  });
+});
+
 describe("document notes", () => {
   it("new documents start with an empty note", () => {
     const doc = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
