@@ -1,5 +1,6 @@
 import { getDefaultStorage } from "./storage";
 import { splitSentences } from "./text/segment";
+import { DEFAULT_SETTINGS } from "./settings";
 
 export type DocumentSource = "paste" | "file" | "pdf" | "image" | "url";
 
