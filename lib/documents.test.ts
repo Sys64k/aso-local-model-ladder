@@ -74,6 +74,13 @@ describe("document store", () => {
     expect(doc.title).toContain("…");
   });
 
+  it("handles long titles without spaces, staying at or below TITLE_MAX_LENGTH", () => {
+    const longTitleWithoutSpaces = "a".repeat(TITLE_MAX_LENGTH - 1) + "bc";
+    const doc = saveDocument({ title: longTitleWithoutSpaces, text: "Content.", source: "paste" }, storage);
+    expect(doc.title.length).toBeLessThanOrEqual(TITLE_MAX_LENGTH + 1);
+    expect(doc.title).toContain("…");
+  });
+
   it("lists newest first", () => {
     const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
     tick();

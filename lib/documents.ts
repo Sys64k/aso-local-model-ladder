@@ -199,10 +199,11 @@ export function tidyTitle(title: string): string {
   if (!collapsed) return "";
   // Cut at TITLE_MAX_LENGTH with word boundary and ellipsis
   if (collapsed.length <= TITLE_MAX_LENGTH) return collapsed;
-  const slice = collapsed.slice(0, TITLE_MAX_LENGTH + 1);
+  const slice = collapsed.slice(0, TITLE_MAX_LENGTH);
   const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : collapsed.slice(0, TITLE_MAX_LENGTH);
-  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : slice;
+  const truncated = cut.replace(/[\s,;:.\-–—]+$/, "");
+  return `${truncated}…`;
 }
 
 export function deriveTitle(text: string): string {
