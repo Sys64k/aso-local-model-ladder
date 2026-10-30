@@ -190,6 +190,14 @@ export function deleteDocument(id: string, storage?: Storage | null): void {
   if (rest.length !== docs.length) write(store, rest);
 }
 
+/** Cut a title at a word boundary, respecting TITLE_MAX_LENGTH. */
+function cutTitle(text: string): string {
+  const slice = text.slice(0, TITLE_MAX_LENGTH + 1);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : text.slice(0, TITLE_MAX_LENGTH);
+  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+}
+
 /** First ~60 chars of the first sentence, cut at a word boundary, with an ellipsis. */
 export function deriveTitle(text: string): string {
   const clean = (text ?? "").replace(/\s+/g, " ").trim();
@@ -197,23 +205,16 @@ export function deriveTitle(text: string): string {
   // Only look at the beginning; splitting a whole book just for the title is wasteful.
   const first = splitSentences(clean.slice(0, 500))[0]?.text ?? clean;
   if (first.length <= TITLE_MAX_LENGTH) return first;
-  const slice = first.slice(0, TITLE_MAX_LENGTH + 1);
-  const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : first.slice(0, TITLE_MAX_LENGTH);
-  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  return cutTitle(first);
 }
 
 /**
  * Tidy a title: collapse whitespace, trim, and cut at a word boundary if needed.
  * If the result is empty, returns the empty string (not "Untitled").
- * This is the same logic deriveTitle uses to cut long titles.
  */
 function tidyTitle(title: string): string {
   const clean = title.replace(/\s+/g, " ").trim();
   if (!clean) return "";
   if (clean.length <= TITLE_MAX_LENGTH) return clean;
-  const slice = clean.slice(0, TITLE_MAX_LENGTH + 1);
-  const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : clean.slice(0, TITLE_MAX_LENGTH);
-  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  return cutTitle(clean);
 }
