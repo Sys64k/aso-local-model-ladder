@@ -57,6 +57,38 @@ describe("document store", () => {
     expect(doc.title).toBe("First sentence.");
   });
 
+  it("tidies whitespace-only title by deriving", () => {
+    const doc = saveDocument({ title: "   \n\t ", text: "First sentence.", source: "file" }, storage);
+    expect(doc.title).toBe("First sentence.");
+  });
+
+  it("tidies title by collapsing whitespace and trimming", () => {
+    expect(saveDocument({ title: "  My   doc  ", text: "text", source: "paste" }, storage).title)
+      .toBe("My doc");
+    expect(saveDocument({ title: "\n\n  Hello\n\n  world", text: "text", source: "file" }, storage).title)
+      .toBe("Hello world");
+  });
+
+  it("cuts title longer than TITLE_MAX_LENGTH at word boundary with ellipsis", () => {
+    const longTitle = "This is a title that is intentionally quite long, definitely longer than the sixty character limit. Longer.";
+    const doc = saveDocument({ title: longTitle, text: "text", source: "paste" }, storage);
+    expect(doc.title).toBe("This is a title that is intentionally quite long, definitely…");
+    expect(doc.title.length).toBeLessThanOrEqual(61);
+    expect(doc.title.endsWith("…")).toBe(true);
+  });
+
+  it("hard-cuts a title when no word boundary", () => {
+    const longTitle = "x".repeat(100);
+    const doc = saveDocument({ title: longTitle, text: "text", source: "file" }, storage);
+    expect(doc.title).toBe(`${"x".repeat(60)}…`);
+  });
+
+  it("cuts title longer than TITLE_MAX_LENGTH exactly like deriveTitle", () => {
+    const text = "This is a rather long first sentence that keeps going well past the sixty character limit. Next.";
+    const doc = saveDocument({ title: text, text: "text", source: "paste" }, storage);
+    expect(doc.title).toBe("This is a rather long first sentence that keeps going well…");
+  });
+
   it("lists newest first", () => {
     const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
     tick();
