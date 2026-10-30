@@ -1,6 +1,5 @@
 "use client";
 
-import { clearDocuments } from "@/lib/documents";
 import { type Ref } from "react";
 import { Modal } from "./Modal";
 import { notePreview, type DocumentSource, type SavedDocument } from "@/lib/documents";
