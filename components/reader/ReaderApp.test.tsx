@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  DOCUMENTS_STORAGE_KEY,
   NOTE_MAX_LENGTH,
   listDocuments,
   saveDocument,
@@ -618,6 +619,99 @@ describe("recent documents", () => {
     expect(screen.queryByRole("button", { name: /^Old one/ })).not.toBeInTheDocument();
     expect(listDocuments()).toHaveLength(0);
     expect(screen.getByRole("heading", { name: "Recent documents" })).toHaveFocus();
+  });
+});
+
+describe("clear all recent documents", () => {
+  const TITLES = ["Doc one", "Doc two", "Doc three"];
+
+  function seed() {
+    TITLES.forEach((title, i) => saveDocument({ title, text: `Text number ${i}.`, source: "paste" }));
+    const first = listDocuments().find((d) => d.title === "Doc one")!;
+    updateNote(first.id, "a private note");
+  }
+
+  function recentRegion(): HTMLElement {
+    return screen.getByRole("region", { name: "Recent documents" });
+  }
+
+  function storedDocuments(): string | null {
+    return window.localStorage.getItem(DOCUMENTS_STORAGE_KEY);
+  }
+
+  function confirmIn(dialog: HTMLElement): HTMLElement {
+    return within(dialog).getByRole("button", { name: /clear all|delete all|remove all/i });
+  }
+
+  function expectAllKept() {
+    expect(within(recentRegion()).getAllByRole("listitem")).toHaveLength(3);
+    for (const title of TITLES) {
+      expect(screen.getByRole("button", { name: new RegExp(`^${title}`) })).toBeInTheDocument();
+    }
+    expect(listDocuments().map((d) => d.title).sort()).toEqual([...TITLES].sort());
+    expect(listDocuments().find((d) => d.title === "Doc one")?.note).toBe("a private note");
+  }
+
+  it("shows no Clear all button when there are no documents", () => {
+    setup();
+    expect(screen.queryByRole("button", { name: /clear all/i })).not.toBeInTheDocument();
+  });
+
+  it("confirming clears the list and storage", async () => {
+    seed();
+    const { user } = setup();
+    expect(within(recentRegion()).getAllByRole("listitem")).toHaveLength(3);
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(confirmIn(screen.getByRole("dialog")));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(within(recentRegion()).queryAllByRole("listitem")).toHaveLength(0);
+    expect(recentRegion()).toHaveTextContent("Nothing here yet");
+    expect(screen.queryByRole("button", { name: /clear all/i })).not.toBeInTheDocument();
+    expect(listDocuments()).toEqual([]);
+    expect([null, "[]"]).toContain(storedDocuments());
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).not.toBeNull();
+  });
+
+  it("clearing keeps the saved settings", async () => {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ theme: "dark" }));
+    seed();
+    const { user } = setup();
+    const before = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    expect(before).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(confirmIn(screen.getByRole("dialog")));
+    expect(listDocuments()).toEqual([]);
+    expect(window.localStorage.getItem(SETTINGS_STORAGE_KEY)).toBe(before);
+  });
+
+  it("cancelling keeps every document in the list and in storage", async () => {
+    seed();
+    const raw = storedDocuments();
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^cancel$/i }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expectAllKept();
+    expect(storedDocuments()).toBe(raw);
+    expect(screen.getByRole("button", { name: "Clear all" })).toHaveFocus();
+  });
+
+  it("Escape closes the dialog without clearing", async () => {
+    seed();
+    const raw = storedDocuments();
+    const { user } = setup();
+    const button = screen.getByRole("button", { name: "Clear all" });
+    button.focus();
+    await user.keyboard("{Enter}");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expectAllKept();
+    expect(storedDocuments()).toBe(raw);
+    expect(button).toHaveFocus();
   });
 });
 

@@ -9,6 +9,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useVoices } from "@/hooks/useVoices";
 import {
+  clearDocuments,
   deleteDocument,
   listDocuments,
   saveDocument,
@@ -86,6 +87,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
   const homeHeadingRef = useRef<HTMLHeadingElement>(null);
   const readerHeadingRef = useRef<HTMLHeadingElement>(null);
   const recentHeadingRef = useRef<HTMLHeadingElement>(null);
+  const clearAllRef = useRef<HTMLButtonElement>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
   const focusRequest = useRef<"reader" | "home" | null>(null);
   const stopRequested = useRef(false);
@@ -257,6 +259,13 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
     },
     [storage, announce],
   );
+
+  const handleClearAll = useCallback(() => {
+    clearDocuments(storage);
+    setDocuments(listDocuments(storage));
+    setDoc(null);
+    setResumeIndex(null);
+  }, [storage]);
 
   const stopDocument = useCallback(() => {
     if (state.status !== "idle") stopRequested.current = true;
@@ -472,7 +481,9 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
                 documents={documents}
                 onOpen={handleOpenRecent}
                 onDelete={handleDelete}
+                onClearAll={handleClearAll}
                 headingRef={recentHeadingRef}
+                clearAllRef={clearAllRef}
               />
             </div>
           ) : (

@@ -190,6 +190,16 @@ export function deleteDocument(id: string, storage?: Storage | null): void {
   if (rest.length !== docs.length) write(store, rest);
 }
 
+/** Remove every document from storage, including notes and reading progress. The storage may have other keys. */
+export function clearDocuments(storage?: Storage | null): void {
+  const store = resolve(storage);
+  try {
+    write(store, []);
+  } catch {
+    // Quota exceeded / private mode: keep going without persistence.
+  }
+}
+
 /** Cut a title at a word boundary, respecting TITLE_MAX_LENGTH. */
 function cutTitle(text: string): string {
   const slice = text.slice(0, TITLE_MAX_LENGTH + 1);

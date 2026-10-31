@@ -1,7 +1,10 @@
 "use client";
 
-import { type Ref } from "react";
+import { useRef, useState } from "react";
+import { Modal } from "./Modal";
 import { notePreview, type DocumentSource, type SavedDocument } from "@/lib/documents";
+
+export const RECENT_SECTION_ID = "recent-section";
 
 export const SOURCE_LABELS: Record<DocumentSource, string> = {
   paste: "Pasted text",
@@ -27,28 +30,59 @@ export interface RecentDocumentsProps {
   documents: SavedDocument[];
   onOpen: (doc: SavedDocument) => void;
   onDelete: (doc: SavedDocument) => void;
-  headingRef?: Ref<HTMLHeadingElement>;
+  onClearAll: () => void;
+  headingRef?: React.RefObject<HTMLHeadingElement | null>;
+  clearAllRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
-export function RecentDocuments({ documents, onOpen, onDelete, headingRef }: RecentDocumentsProps) {
+export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headingRef, clearAllRef }: RecentDocumentsProps) {
+  const [showDialog, setShowDialog] = useState(false);
+  const internalClearAllRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+
+  const setInternalClearAllRef = (el: HTMLElement | null) => {
+    internalClearAllRef.current = el;
+    if (clearAllRef) clearAllRef.current = el as HTMLButtonElement | null;
+  };
+
   return (
-    <section aria-labelledby="recent-heading" className="space-y-4">
-      <h2 id="recent-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
-        Recent documents
-      </h2>
+    <section
+      id={RECENT_SECTION_ID}
+      ref={sectionRef}
+      role="region"
+      aria-labelledby="recent-heading"
+      aria-label="Recent documents"
+      className="space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <h2 id="recent-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
+          Recent documents
+        </h2>
+        {documents.length > 0 && (
+          <button
+            ref={setInternalClearAllRef}
+            type="button"
+            onClick={() => setShowDialog(true)}
+            className="min-h-12 min-w-0 rounded-lg border-2 border-fg bg-surface px-4 text-lg hover:bg-fg hover:text-bg"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
       {documents.length === 0 ? (
-        <p className="text-lg text-muted">
+        <p
+          tabIndex={0}
+          role="region"
+          aria-live="polite"
+        >
           Nothing here yet. Documents you read will appear here.
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul role="list" className="space-y-3">
           {documents.map((doc) => {
             const preview = notePreview(doc.note);
             return (
-            <li
-              key={doc.id}
-              className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2"
-            >
+            <li role="listitem" key={doc.id} className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2">
               <button
                 type="button"
                 onClick={() => onOpen(doc)}
@@ -80,6 +114,39 @@ export function RecentDocuments({ documents, onOpen, onDelete, headingRef }: Rec
           })}
         </ul>
       )}
+      <Modal
+        open={showDialog}
+        onClose={() => setShowDialog(false)}
+        title="Clear all recent documents?"
+        returnFocusRef={clearAllRef}
+        returnFocusOverride={internalClearAllRef.current}
+      >
+        <div className="flex flex-col gap-6">
+          <p className="text-lg">
+            Are you sure you want to remove all saved documents? This cannot be undone.
+          </p>
+          <div className="flex justify-end gap-4">
+            <button
+              type="button"
+              id="clear-confirm-button"
+              onClick={() => {
+                onClearAll();
+                setShowDialog(false);
+              }}
+              className="min-h-12 min-w-0 rounded-lg border-2 border-fg bg-fg px-6 text-lg font-bold text-bg hover:bg-white/10"
+            >
+              Clear all
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDialog(false)}
+              className="min-h-12 min-w-12 rounded-lg border-2 border-fg px-4 text-lg"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
     </section>
   );
 }
