@@ -46,7 +46,14 @@ export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headi
   };
 
   return (
-    <div id={RECENT_SECTION_ID} ref={sectionRef} aria-labelledby="recent-heading" className="space-y-4">
+    <section
+      id={RECENT_SECTION_ID}
+      ref={sectionRef}
+      role="region"
+      aria-labelledby="recent-heading"
+      aria-label="Recent documents"
+      className="space-y-4"
+    >
       <div className="flex items-center justify-between">
         <h2 id="recent-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
           Recent documents
@@ -71,14 +78,11 @@ export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headi
           Nothing here yet. Documents you read will appear here.
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul role="list" className="space-y-3">
           {documents.map((doc) => {
             const preview = notePreview(doc.note);
             return (
-            <li
-              key={doc.id}
-              className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2"
-            >
+            <li role="listitem" key={doc.id} className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-fg bg-surface p-2">
               <button
                 type="button"
                 onClick={() => onOpen(doc)}
@@ -143,6 +147,6 @@ export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headi
           </div>
         </div>
       </Modal>
-    </div>
+    </section>
   );
 }
