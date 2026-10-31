@@ -279,8 +279,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   }, []);
 
   useEffect(() => {
-    const normalized = normalizeText(pasteText);
-    if (normalized.length >= 20) {
+    if (pasteText.length >= 20) {
       setStatistics(null);
       requestTextRef.current = pasteText;
       statsAbortControllerRef.current?.abort();
