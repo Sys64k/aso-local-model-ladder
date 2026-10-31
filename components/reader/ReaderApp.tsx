@@ -87,6 +87,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
   const homeHeadingRef = useRef<HTMLHeadingElement>(null);
   const readerHeadingRef = useRef<HTMLHeadingElement>(null);
   const recentHeadingRef = useRef<HTMLHeadingElement>(null);
+  const clearAllRef = useRef<HTMLButtonElement>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
   const focusRequest = useRef<"reader" | "home" | null>(null);
   const stopRequested = useRef(false);
@@ -482,6 +483,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
                 onDelete={handleDelete}
                 onClearAll={handleClearAll}
                 headingRef={recentHeadingRef}
+                clearAllRef={clearAllRef}
               />
             </div>
           ) : (

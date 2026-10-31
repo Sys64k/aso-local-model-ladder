@@ -34,48 +34,57 @@ export function Modal({ open, onClose, title, children, returnFocusRef, id, retu
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnRef = useRef(returnFocusRef);
   const overrideRef = useRef(returnFocusOverride);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  const openRef = useRef<boolean>(false);
+
   useEffect(() => {
+    openRef.current = open;
+    if (open) {
+      // Store the currently focused element before opening the modal
+      if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+        previousFocus.current = document.activeElement;
+      }
+    }
     returnRef.current = returnFocusRef;
-  });
+  }, [open, returnFocusRef]);
+
   useEffect(() => {
     overrideRef.current = returnFocusOverride;
   }, [returnFocusOverride]);
 
   useEffect(() => {
     if (!open) return;
-    const previous =
-      typeof document !== "undefined" && document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
     const node = dialogRef.current;
     if (node) {
       const first = focusableIn(node)[0];
       (first ?? node).focus();
     }
     return () => {
-      // Focus on main element or try returnFocusRef
-      const main = document.querySelector('main');
-      if (main?.isConnected) {
-        main.focus();
+      // Try to restore focus to the element that was focused before opening
+      if (previousFocus.current?.isConnected) {
+        previousFocus.current.focus();
         return;
       }
 
       // Fallback: try returnFocusRef
       if (returnFocusRef?.current?.isConnected) {
         returnFocusRef.current.focus();
-      } else if (overrideRef.current?.isConnected) {
-        overrideRef.current.focus();
-      } else if (previous?.isConnected) {
-        previous.focus();
+        return;
       }
 
-      // Last resort: try to find "Nothing here yet" in the recent documents section
-      const nothingElement = document.querySelector('p[aria-live="polite"]');
-      if (nothingElement?.isConnected && nothingElement.textContent?.includes("Nothing here yet")) {
-        nothingElement.focus();
+      // Fallback: try returnFocusOverride
+      if (overrideRef.current?.isConnected) {
+        overrideRef.current.focus();
+        return;
+      }
+
+      // Last resort: try to focus on main element
+      const main = document.querySelector('main');
+      if (main?.isConnected) {
+        main.focus();
       }
     };
-  }, [open, returnFocusRef]);
+  }, [open, returnFocusRef, returnFocusOverride]);
 
   if (!open) return null;
 

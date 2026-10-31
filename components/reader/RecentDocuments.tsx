@@ -31,22 +31,22 @@ export interface RecentDocumentsProps {
   onOpen: (doc: SavedDocument) => void;
   onDelete: (doc: SavedDocument) => void;
   onClearAll: () => void;
-  headingRef?: React.RefObject<HTMLHeadingElement>;
-  clearAllRef?: React.RefObject<HTMLElement | null>;
+  headingRef?: React.RefObject<HTMLHeadingElement | null>;
+  clearAllRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
 export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headingRef, clearAllRef }: RecentDocumentsProps) {
   const [showDialog, setShowDialog] = useState(false);
   const internalClearAllRef = useRef<HTMLElement>(null);
-  const sectionRef = useRef<HTMLSectionElement>(null);
+  const sectionRef = useRef<HTMLDivElement | null>(null);
 
   const setInternalClearAllRef = (el: HTMLElement | null) => {
     internalClearAllRef.current = el;
-    clearAllRef?.(el || null);
+    if (clearAllRef) clearAllRef.current = el as HTMLButtonElement | null;
   };
 
   return (
-    <section id={RECENT_SECTION_ID} aria-labelledby="recent-heading" className="space-y-4" ref={sectionRef}>
+    <div id={RECENT_SECTION_ID} ref={sectionRef} aria-labelledby="recent-heading" className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 id="recent-heading" ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
           Recent documents
@@ -143,6 +143,6 @@ export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headi
           </div>
         </div>
       </Modal>
-    </section>
+    </div>
   );
 }
