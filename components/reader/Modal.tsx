@@ -63,12 +63,24 @@ export function Modal({ open, onClose, title, children, returnFocusRef, id, retu
       if (dialogNode) {
         const section = dialogNode.closest('section');
         if (section) {
-          const nothingElement = Array.from(section.querySelectorAll('p')).find(
-            (p) => p.textContent?.includes("Nothing here yet"),
-          );
-          if (nothingElement) {
+          // Look for the "Nothing here yet" paragraph more precisely
+          const nothingElement = section.querySelector('p[tabIndex="0"]');
+          if (nothingElement && nothingElement.textContent?.includes("Nothing here yet")) {
             // Delay to allow React to finish re-rendering
-            setTimeout(() => nothingElement.focus(), 0);
+            setTimeout(() => {
+              console.log("Focusing 'Nothing here yet' paragraph");
+              nothingElement.focus();
+            }, 0);
+            return;
+          }
+          // Fallback: try to find any p element with that text content
+          const allPs = Array.from(section.querySelectorAll('p'));
+          const found = allPs.find(p => p.textContent?.includes("Nothing here yet"));
+          if (found) {
+            setTimeout(() => {
+              console.log("Focusing 'Nothing here yet' paragraph (second fallback)");
+              found.focus();
+            }, 0);
             return;
           }
         }
