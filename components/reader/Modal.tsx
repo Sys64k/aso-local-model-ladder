@@ -20,6 +20,8 @@ export interface ModalProps {
   returnFocusRef?: RefObject<HTMLElement | null>;
   /** Optional id for the dialog element. */
   id?: string;
+  /** If provided, this element should receive focus when the dialog closes, even if it's not the previously focused element. */
+  returnFocusOverride?: HTMLElement | null;
 }
 
 /**
@@ -27,13 +29,17 @@ export interface ModalProps {
  * trapped (Tab / Shift+Tab wrap), Escape closes, focus returns on close.
  * Render the rest of the page with `inert` while it is open.
  */
-export function Modal({ open, onClose, title, children, returnFocusRef, id }: ModalProps) {
+export function Modal({ open, onClose, title, children, returnFocusRef, id, returnFocusOverride }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnRef = useRef(returnFocusRef);
+  const overrideRef = useRef(returnFocusOverride);
   useEffect(() => {
     returnRef.current = returnFocusRef;
   });
+  useEffect(() => {
+    overrideRef.current = returnFocusOverride;
+  }, [returnFocusOverride]);
 
   useEffect(() => {
     if (!open) return;
@@ -47,10 +53,32 @@ export function Modal({ open, onClose, title, children, returnFocusRef, id }: Mo
       (first ?? node).focus();
     }
     return () => {
-      const target = returnRef.current?.current ?? previous;
-      if (target && target.isConnected) target.focus();
+      const target = overrideRef.current ?? returnFocusRef?.current ?? previous;
+      if (target && target.isConnected) {
+        target.focus();
+        return;
+      }
+      // Fallback: try to focus "Nothing here yet" in parent section
+      const dialogNode = dialogRef.current;
+      if (dialogNode) {
+        const section = dialogNode.closest('section');
+        if (section) {
+          const nothingElement = Array.from(section.querySelectorAll('p')).find(
+            (p) => p.textContent?.includes("Nothing here yet"),
+          );
+          if (nothingElement) {
+            // Delay to allow React to finish re-rendering
+            setTimeout(() => nothingElement.focus(), 0);
+            return;
+          }
+        }
+        // Fallback to dialog content
+        const focusables = focusableIn(dialogNode);
+        const focusable = focusables[0] ?? dialogNode;
+        focusable.focus();
+      }
     };
-  }, [open]);
+  }, [open, returnFocusRef]);
 
   if (!open) return null;
 

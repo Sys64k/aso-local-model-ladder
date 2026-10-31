@@ -261,7 +261,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
 
   const handleClearAll = useCallback(() => {
     clearDocuments(storage);
-    setDocuments([]);
+    setDocuments(listDocuments(storage));
     setDoc(null);
     setResumeIndex(null);
   }, [storage]);

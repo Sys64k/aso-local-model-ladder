@@ -32,11 +32,12 @@ export interface RecentDocumentsProps {
   onDelete: (doc: SavedDocument) => void;
   onClearAll: () => void;
   headingRef?: Ref<HTMLHeadingElement>;
+  clearAllRef?: Ref<HTMLButtonElement>;
 }
 
-export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headingRef }: RecentDocumentsProps) {
+export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headingRef, clearAllRef }: RecentDocumentsProps) {
   const [showDialog, setShowDialog] = useState(false);
-  const clearAllRef = useRef<HTMLButtonElement>(null);
+  const internalClearAllRef = useRef<HTMLButtonElement>(null);
   const sectionRef = useRef<HTMLSectionElement>(null);
 
   return (
@@ -47,7 +48,10 @@ export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headi
         </h2>
         {documents.length > 0 && (
           <button
-            ref={clearAllRef}
+            ref={(el) => {
+              internalClearAllRef.current = el;
+              clearAllRef?.(el);
+            }}
             type="button"
             onClick={() => setShowDialog(true)}
             className="min-h-12 min-w-0 rounded-lg border-2 border-fg bg-surface px-4 text-lg hover:bg-fg hover:text-bg"
@@ -108,7 +112,8 @@ export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headi
         open={showDialog}
         onClose={() => setShowDialog(false)}
         title="Clear all recent documents?"
-        returnFocusRef={sectionRef}
+        returnFocusRef={clearAllRef}
+        returnFocusOverride={internalClearAllRef.current}
       >
         <div className="flex flex-col gap-6">
           <p className="text-lg">
