@@ -122,6 +122,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const requestTextRef = useRef("");
   const isMountedRef = useRef(true);
+  const statsAbortControllerRef = useRef<AbortController | null>(null);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -239,11 +240,15 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
 
   const fetchStatistics = useCallback(async (text: string) => {
     requestTextRef.current = text;
+    statsAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    statsAbortControllerRef.current = controller;
     try {
       const res = await fetch("/api/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -278,6 +283,8 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
     if (normalized.length >= 20) {
       setStatistics(null);
       requestTextRef.current = pasteText;
+      statsAbortControllerRef.current?.abort();
+      statsAbortControllerRef.current = null;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -288,6 +295,9 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
       }, 500);
     } else {
       setStatistics(null);
+      requestTextRef.current = "";
+      statsAbortControllerRef.current?.abort();
+      statsAbortControllerRef.current = null;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
@@ -298,6 +308,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
+      statsAbortControllerRef.current?.abort();
     };
   }, [pasteText, fetchStatistics]);
 
