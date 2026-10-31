@@ -113,6 +113,16 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [statistics, setStatistics] = useState<{
+    words: number;
+    sentences: number;
+    paragraphs: number;
+    minutes: number;
+  } | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const requestTextRef = useRef("");
+  const isMountedRef = useRef(true);
+  const statsAbortControllerRef = useRef<AbortController | null>(null);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -227,6 +237,79 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
     setProgress(null);
     setStatus("Cancelled");
   };
+
+  const fetchStatistics = useCallback(async (text: string) => {
+    requestTextRef.current = text;
+    statsAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    statsAbortControllerRef.current = controller;
+    try {
+      const res = await fetch("/api/stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        if (requestTextRef.current === text) {
+          setStatistics(null);
+        }
+        return;
+      }
+
+      const body = await res.json();
+      if (body.words !== undefined && body.sentences !== undefined && body.paragraphs !== undefined && body.minutes !== undefined) {
+        if (requestTextRef.current === text && isMountedRef.current) {
+          setStatistics({
+            words: body.words,
+            sentences: body.sentences,
+            paragraphs: body.paragraphs,
+            minutes: body.minutes,
+          });
+        }
+      } else if (requestTextRef.current === text && isMountedRef.current) {
+        setStatistics(null);
+      }
+    } catch {
+      if (requestTextRef.current === text && isMountedRef.current) {
+        setStatistics(null);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pasteText.length >= 20) {
+      setStatistics(null);
+      requestTextRef.current = pasteText;
+      statsAbortControllerRef.current?.abort();
+      statsAbortControllerRef.current = null;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => {
+        if (requestTextRef.current === pasteText) {
+          void fetchStatistics(pasteText);
+        }
+      }, 500);
+    } else {
+      setStatistics(null);
+      requestTextRef.current = "";
+      statsAbortControllerRef.current?.abort();
+      statsAbortControllerRef.current = null;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      statsAbortControllerRef.current?.abort();
+    };
+  }, [pasteText, fetchStatistics]);
 
   const handleFile = (file: File, via: "file" | "photo") => {
     const kind = detectKind(file);
@@ -449,6 +532,11 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
                 rows={8}
                 className="block min-h-48 w-full rounded-lg border-2 border-current bg-transparent p-3 text-lg"
               />
+              {statistics && (
+                <p role="group" aria-label="Text statistics" className="text-sm text-gray-600 dark:text-gray-400">
+                  {statistics.words} words · {statistics.sentences} sentences · {statistics.paragraphs} paragraphs · {statistics.minutes} min read
+                </p>
+              )}
               <button type="submit" className={PRIMARY_BUTTON}>
                 Read this text
               </button>
