@@ -1,6 +1,6 @@
 "use client";
 
-import { type Ref, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { notePreview, type DocumentSource, type SavedDocument } from "@/lib/documents";
 
@@ -31,14 +31,19 @@ export interface RecentDocumentsProps {
   onOpen: (doc: SavedDocument) => void;
   onDelete: (doc: SavedDocument) => void;
   onClearAll: () => void;
-  headingRef?: Ref<HTMLHeadingElement>;
-  clearAllRef?: Ref<HTMLButtonElement>;
+  headingRef?: React.RefObject<HTMLHeadingElement>;
+  clearAllRef?: React.RefObject<HTMLElement | null>;
 }
 
 export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headingRef, clearAllRef }: RecentDocumentsProps) {
   const [showDialog, setShowDialog] = useState(false);
-  const internalClearAllRef = useRef<HTMLButtonElement>(null);
+  const internalClearAllRef = useRef<HTMLElement>(null);
   const sectionRef = useRef<HTMLSectionElement>(null);
+
+  const setInternalClearAllRef = (el: HTMLElement | null) => {
+    internalClearAllRef.current = el;
+    clearAllRef?.(el || null);
+  };
 
   return (
     <section id={RECENT_SECTION_ID} aria-labelledby="recent-heading" className="space-y-4" ref={sectionRef}>
@@ -48,10 +53,7 @@ export function RecentDocuments({ documents, onOpen, onDelete, onClearAll, headi
         </h2>
         {documents.length > 0 && (
           <button
-            ref={(el) => {
-              internalClearAllRef.current = el;
-              clearAllRef?.(el);
-            }}
+            ref={setInternalClearAllRef}
             type="button"
             onClick={() => setShowDialog(true)}
             className="min-h-12 min-w-0 rounded-lg border-2 border-fg bg-surface px-4 text-lg hover:bg-fg hover:text-bg"

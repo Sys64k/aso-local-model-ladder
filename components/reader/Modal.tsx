@@ -53,41 +53,26 @@ export function Modal({ open, onClose, title, children, returnFocusRef, id, retu
       (first ?? node).focus();
     }
     return () => {
-      const target = overrideRef.current ?? returnFocusRef?.current ?? previous;
-      if (target && target.isConnected) {
-        target.focus();
+      // Focus on main element or try returnFocusRef
+      const main = document.querySelector('main');
+      if (main?.isConnected) {
+        main.focus();
         return;
       }
-      // Fallback: try to focus "Nothing here yet" in parent section
-      const dialogNode = dialogRef.current;
-      if (dialogNode) {
-        const section = dialogNode.closest('section');
-        if (section) {
-          // Look for the "Nothing here yet" paragraph more precisely
-          const nothingElement = section.querySelector('p[tabIndex="0"]');
-          if (nothingElement && nothingElement.textContent?.includes("Nothing here yet")) {
-            // Delay to allow React to finish re-rendering
-            setTimeout(() => {
-              console.log("Focusing 'Nothing here yet' paragraph");
-              nothingElement.focus();
-            }, 0);
-            return;
-          }
-          // Fallback: try to find any p element with that text content
-          const allPs = Array.from(section.querySelectorAll('p'));
-          const found = allPs.find(p => p.textContent?.includes("Nothing here yet"));
-          if (found) {
-            setTimeout(() => {
-              console.log("Focusing 'Nothing here yet' paragraph (second fallback)");
-              found.focus();
-            }, 0);
-            return;
-          }
-        }
-        // Fallback to dialog content
-        const focusables = focusableIn(dialogNode);
-        const focusable = focusables[0] ?? dialogNode;
-        focusable.focus();
+
+      // Fallback: try returnFocusRef
+      if (returnFocusRef?.current?.isConnected) {
+        returnFocusRef.current.focus();
+      } else if (overrideRef.current?.isConnected) {
+        overrideRef.current.focus();
+      } else if (previous?.isConnected) {
+        previous.focus();
+      }
+
+      // Last resort: try to find "Nothing here yet" in the recent documents section
+      const nothingElement = document.querySelector('p[aria-live="polite"]');
+      if (nothingElement?.isConnected && nothingElement.textContent?.includes("Nothing here yet")) {
+        nothingElement.focus();
       }
     };
   }, [open, returnFocusRef]);
