@@ -190,6 +190,20 @@ export function deleteDocument(id: string, storage?: Storage | null): void {
   if (rest.length !== docs.length) write(store, rest);
 }
 
+/**
+ * Clear all saved documents and their notes. Leaves other storage keys alone.
+ * Never throws.
+ */
+export function clearDocuments(storage?: Storage | null): void {
+  const store = resolve(storage);
+  if (!store) return;
+  try {
+    store.removeItem(DOCUMENTS_STORAGE_KEY);
+  } catch {
+    // Quota exceeded / private mode: keep going without persistence.
+  }
+}
+
 /** First ~60 chars of the first sentence, cut at a word boundary, with an ellipsis. */
 export function deriveTitle(text: string): string {
   const clean = (text ?? "").replace(/\s+/g, " ").trim();

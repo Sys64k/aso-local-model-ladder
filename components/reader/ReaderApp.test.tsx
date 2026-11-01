@@ -621,6 +621,87 @@ describe("recent documents", () => {
   });
 });
 
+describe("clear all recent documents", () => {
+  function seed() {
+    const a = saveDocument({ title: "Alpha doc", text: "Alpha text.", source: "paste" });
+    const b = saveDocument({ title: "Beta doc", text: "Beta text.", source: "file" });
+    updateNote(b.id, "Beta note");
+    return [a, b];
+  }
+
+  it("hides Clear all when there are no documents", () => {
+    setup();
+    expect(screen.queryByRole("button", { name: /clear all/i })).not.toBeInTheDocument();
+  });
+
+  it("confirming clears the list and storage", async () => {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ theme: "dark" }));
+    seed();
+    const { user } = setup();
+    const settingsBefore = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    expect(settingsBefore).not.toBeNull();
+    expect(screen.getByRole("button", { name: /^Alpha doc/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    const dialog = screen.getByRole("dialog");
+    // Nothing is removed before confirming.
+    expect(listDocuments()).toHaveLength(2);
+    await user.click(within(dialog).getByRole("button", { name: "Clear all" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Alpha doc/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Beta doc/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Nothing here yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /clear all/i })).not.toBeInTheDocument();
+    expect(listDocuments()).toEqual([]);
+    // Other saved data (settings) is untouched.
+    expect(window.localStorage.getItem(SETTINGS_STORAGE_KEY)).toBe(settingsBefore);
+    // Focus is not lost: it goes to the Recent documents heading, like Delete.
+    expect(screen.getByRole("heading", { name: "Recent documents" })).toHaveFocus();
+  });
+
+  it("cancelling keeps every document", async () => {
+    const docs = seed();
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Alpha doc/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Beta doc/ })).toBeInTheDocument();
+    expect(listDocuments().map((d) => d.id).sort()).toEqual(docs.map((d) => d.id).sort());
+    expect(listDocuments().find((d) => d.title === "Beta doc")?.note).toBe("Beta note");
+    expect(screen.getByRole("button", { name: "Clear all" })).toHaveFocus();
+  });
+
+  it("Escape closes the dialog without clearing and does not leave the home screen", async () => {
+    seed();
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(listDocuments()).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /^Alpha doc/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "What would you like to read?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear all" })).toHaveFocus();
+  });
+
+  it("documents imported after clearing show up again with Clear all", async () => {
+    seed();
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Clear all" }));
+    expect(listDocuments()).toEqual([]);
+    await importText(user);
+    await user.click(screen.getByRole("button", { name: "New document" }));
+    expect(listDocuments()).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /^First sentence here\./ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear all" })).toBeInTheDocument();
+  });
+});
+
 describe("notes", () => {
   const NOTE = "Remember this. Check the second part.";
   const NOTE_SENTENCES = ["Remember this.", "Check the second part."];

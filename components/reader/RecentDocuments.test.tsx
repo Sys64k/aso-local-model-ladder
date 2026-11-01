@@ -25,8 +25,16 @@ function escapeRegExp(s: string): string {
 function renderList(documents: SavedDocument[]) {
   const onOpen = vi.fn();
   const onDelete = vi.fn();
-  render(<RecentDocuments documents={documents} onOpen={onOpen} onDelete={onDelete} />);
-  return { onOpen, onDelete };
+  const onClearAll = vi.fn();
+  render(
+    <RecentDocuments
+      documents={documents}
+      onOpen={onOpen}
+      onDelete={onDelete}
+      onClearAll={onClearAll}
+    />,
+  );
+  return { onOpen, onDelete, onClearAll };
 }
 
 describe("RecentDocuments note preview", () => {
@@ -85,5 +93,128 @@ describe("RecentDocuments note preview", () => {
     await user.click(screen.getByRole("button", { name: "Delete My letter" }));
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledWith(doc);
+  });
+});
+
+describe("RecentDocuments clear all", () => {
+  const twoDocs = () => [
+    makeDoc({ id: "a", title: "First doc" }),
+    makeDoc({ id: "b", title: "Second doc" }),
+  ];
+
+  function clearAllButton(): HTMLElement {
+    return screen.getByRole("button", { name: "Clear all" });
+  }
+
+  function dialog(): HTMLElement {
+    return screen.getByRole("dialog");
+  }
+
+  it("hides the Clear all button when there are no documents", () => {
+    renderList([]);
+    expect(screen.queryByRole("button", { name: /clear all/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows the Clear all button with a single document", () => {
+    renderList([makeDoc()]);
+    expect(clearAllButton()).toBeInTheDocument();
+    expect(clearAllButton()).toHaveAttribute("type", "button");
+    expect(clearAllButton().className).toMatch(/\bmin-h-(1[2-9]|[2-9]\d)\b/);
+  });
+
+  it("does not open a dialog or clear anything until the button is pressed", () => {
+    const { onClearAll } = renderList(twoDocs());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onClearAll).not.toHaveBeenCalled();
+  });
+
+  it("opens a modal confirmation dialog without clearing yet", async () => {
+    const user = userEvent.setup();
+    const { onClearAll, onDelete } = renderList(twoDocs());
+    await user.click(clearAllButton());
+    const d = dialog();
+    expect(d).toHaveAttribute("aria-modal", "true");
+    expect(d).toHaveAccessibleName(expect.stringMatching(/clear/i));
+    expect(within(d).getByRole("button", { name: "Clear all" })).toBeInTheDocument();
+    expect(within(d).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(onClearAll).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it("confirming calls onClearAll once and closes the dialog", async () => {
+    const user = userEvent.setup();
+    const { onClearAll, onDelete } = renderList(twoDocs());
+    await user.click(clearAllButton());
+    await user.click(within(dialog()).getByRole("button", { name: "Clear all" }));
+    expect(onClearAll).toHaveBeenCalledTimes(1);
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("cancelling closes the dialog and keeps every document", async () => {
+    const user = userEvent.setup();
+    const { onClearAll, onDelete } = renderList(twoDocs());
+    await user.click(clearAllButton());
+    await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onClearAll).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /^First doc/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Second doc/ })).toBeInTheDocument();
+    expect(clearAllButton()).toHaveFocus();
+  });
+
+  it("the dialog's Close button also cancels", async () => {
+    const user = userEvent.setup();
+    const { onClearAll } = renderList(twoDocs());
+    await user.click(clearAllButton());
+    await user.click(within(dialog()).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onClearAll).not.toHaveBeenCalled();
+  });
+
+  it("is keyboard accessible: focus moves into the dialog and Escape closes it", async () => {
+    const user = userEvent.setup();
+    const { onClearAll } = renderList(twoDocs());
+    clearAllButton().focus();
+    await user.keyboard("{Enter}");
+    const d = dialog();
+    expect(d).toContainElement(document.activeElement as HTMLElement);
+
+    // Focus stays trapped inside while tabbing around.
+    for (let i = 0; i < 5; i++) {
+      await user.tab();
+      expect(d).toContainElement(document.activeElement as HTMLElement);
+    }
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onClearAll).not.toHaveBeenCalled();
+    expect(clearAllButton()).toHaveFocus();
+  });
+
+  it("can be confirmed with the keyboard alone", async () => {
+    const user = userEvent.setup();
+    const { onClearAll } = renderList(twoDocs());
+    clearAllButton().focus();
+    await user.keyboard(" ");
+    const confirm = within(dialog()).getByRole("button", { name: "Clear all" });
+    for (let i = 0; i < 6 && document.activeElement !== confirm; i++) await user.tab();
+    expect(confirm).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onClearAll).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("can be reopened after cancelling", async () => {
+    const user = userEvent.setup();
+    const { onClearAll } = renderList(twoDocs());
+    await user.click(clearAllButton());
+    await user.keyboard("{Escape}");
+    await user.click(clearAllButton());
+    expect(dialog()).toBeInTheDocument();
+    await user.click(within(dialog()).getByRole("button", { name: "Clear all" }));
+    expect(onClearAll).toHaveBeenCalledTimes(1);
   });
 });
