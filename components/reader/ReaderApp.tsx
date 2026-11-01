@@ -14,6 +14,7 @@ import {
   saveDocument,
   updateNote,
   updateProgress,
+  clearDocuments,
   type SavedDocument,
 } from "@/lib/documents";
 import { DEFAULT_SETTINGS, SETTING_LIMITS, THEMES } from "@/lib/settings";
@@ -258,6 +259,12 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
     [storage, announce],
   );
 
+  const handleClearAll = useCallback(() => {
+    clearDocuments(storage);
+    setDocuments(listDocuments(storage));
+    recentHeadingRef.current?.focus();
+  }, [storage]);
+
   const stopDocument = useCallback(() => {
     if (state.status !== "idle") stopRequested.current = true;
     speech.stop();
@@ -472,6 +479,7 @@ export function ReaderApp({ storage, speechDeps }: ReaderAppProps = {}) {
                 documents={documents}
                 onOpen={handleOpenRecent}
                 onDelete={handleDelete}
+                onClearAll={handleClearAll}
                 headingRef={recentHeadingRef}
               />
             </div>
