@@ -512,14 +512,10 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
               />
               {stats && (
                 <div className="mt-2 text-lg">
-                  <span className="mr-4">{stats.words} </span>
-                  <span className="mr-4">words</span>
-                  <span className="mr-4">{stats.sentences} </span>
-                  <span className="mr-4">sentences</span>
-                  <span className="mr-4">{stats.paragraphs} </span>
-                  <span className="mr-4">paragraphs</span>
-                  <span>{stats.minutes} </span>
-                  <span>minute{stats.minutes !== 1 ? 's' : ''}</span>
+                  <span className="mr-4">Words: {stats.words}</span>
+                  <span className="mr-4">Sentences: {stats.sentences}</span>
+                  <span className="mr-4">Paragraphs: {stats.paragraphs}</span>
+                  <span>Reading time: {stats.minutes} min</span>
                 </div>
               )}
               <button type="submit" className={PRIMARY_BUTTON}>
