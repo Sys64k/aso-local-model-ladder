@@ -6,6 +6,7 @@ import {
   NOTE_MAX_LENGTH,
   NOTE_PREVIEW_LENGTH,
   TITLE_MAX_LENGTH,
+  clearDocuments,
   deleteDocument,
   deriveTitle,
   getDocument,
@@ -392,6 +393,103 @@ describe("document notes", () => {
       result = updateNote(a.id, "note", storage);
     }).not.toThrow();
     expect(result).toBeNull();
+  });
+});
+
+describe("clearDocuments", () => {
+  function storedDocs(store: Storage): unknown[] {
+    const raw = store.getItem(DOCUMENTS_STORAGE_KEY);
+    // Either removing the key or writing an empty list is fine.
+    return raw === null ? [] : (JSON.parse(raw) as unknown[]);
+  }
+
+  it("removes every saved document, notes included", () => {
+    const a = saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    tick();
+    const b = saveDocument({ title: "B", text: "b", source: "pdf" }, storage);
+    updateNote(b.id, "secret-note-b", storage);
+    expect(listDocuments(storage)).toHaveLength(2);
+
+    clearDocuments(storage);
+
+    expect(listDocuments(storage)).toEqual([]);
+    expect(getDocument(a.id, storage)).toBeNull();
+    expect(getDocument(b.id, storage)).toBeNull();
+    expect(storedDocs(storage)).toEqual([]);
+    expect(storage.getItem(DOCUMENTS_STORAGE_KEY) ?? "").not.toContain("secret-note-b");
+  });
+
+  it("clears a full list of MAX_DOCUMENTS documents", () => {
+    for (let i = 0; i < MAX_DOCUMENTS; i++) {
+      tick();
+      saveDocument({ title: `D${i}`, text: `text ${i}`, source: "paste" }, storage);
+    }
+    expect(listDocuments(storage)).toHaveLength(MAX_DOCUMENTS);
+    clearDocuments(storage);
+    expect(listDocuments(storage)).toEqual([]);
+  });
+
+  it("leaves other storage keys alone", () => {
+    storage.setItem("readaloud:settings:v1", '{"theme":"dark"}');
+    storage.setItem("something-else", "keep me");
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    clearDocuments(storage);
+    expect(storage.getItem("readaloud:settings:v1")).toBe('{"theme":"dark"}');
+    expect(storage.getItem("something-else")).toBe("keep me");
+  });
+
+  it("is a no-op on empty storage and can be called twice", () => {
+    expect(() => clearDocuments(storage)).not.toThrow();
+    expect(listDocuments(storage)).toEqual([]);
+    saveDocument({ title: "A", text: "a", source: "paste" }, storage);
+    clearDocuments(storage);
+    expect(() => clearDocuments(storage)).not.toThrow();
+    expect(listDocuments(storage)).toEqual([]);
+  });
+
+  it("clears corrupt stored data too", () => {
+    storage.setItem(DOCUMENTS_STORAGE_KEY, "{oops");
+    expect(() => clearDocuments(storage)).not.toThrow();
+    expect(listDocuments(storage)).toEqual([]);
+  });
+
+  it("lets new documents be saved afterwards", () => {
+    saveDocument({ title: "Old", text: "old", source: "paste" }, storage);
+    clearDocuments(storage);
+    tick();
+    const fresh = saveDocument({ title: "New", text: "new", source: "file" }, storage);
+    expect(listDocuments(storage)).toEqual([fresh]);
+  });
+
+  it("uses localStorage by default", () => {
+    window.localStorage.clear();
+    try {
+      saveDocument({ title: "A", text: "a", source: "paste" });
+      expect(listDocuments()).toHaveLength(1);
+      clearDocuments();
+      expect(listDocuments()).toEqual([]);
+      expect(storedDocs(window.localStorage)).toEqual([]);
+    } finally {
+      window.localStorage.clear();
+    }
+  });
+
+  it("does nothing and does not throw with null storage", () => {
+    expect(() => clearDocuments(null)).not.toThrow();
+  });
+
+  it("never throws when storage fails", () => {
+    class BrokenStorage extends MemoryStorage {
+      removeItem(): void {
+        throw new Error("SecurityError: storage disabled");
+      }
+    }
+    const broken = new BrokenStorage();
+    saveDocument({ title: "A", text: "a", source: "paste" }, broken);
+    broken.failWrites = true;
+    expect(() => clearDocuments(broken)).not.toThrow();
+    broken.failReads = true;
+    expect(() => clearDocuments(broken)).not.toThrow();
   });
 });
 
