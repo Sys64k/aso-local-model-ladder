@@ -196,11 +196,7 @@ export function deriveTitle(text: string): string {
   if (!clean) return "Untitled";
   // Only look at the beginning; splitting a whole book just for the title is wasteful.
   const first = splitSentences(clean.slice(0, 500))[0]?.text ?? clean;
-  if (first.length <= TITLE_MAX_LENGTH) return first;
-  const slice = first.slice(0, TITLE_MAX_LENGTH + 1);
-  const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : first.slice(0, TITLE_MAX_LENGTH);
-  return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  return truncateTitle(first);
 }
 
 /** Truncates a title to TITLE_MAX_LENGTH characters with ellipsis at a word boundary */
