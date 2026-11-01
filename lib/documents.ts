@@ -99,7 +99,7 @@ export function saveDocument(
   const store = resolve(storage);
   const docs = listDocuments(store);
   const now = Date.now();
-  const title = input.title?.trim() || deriveTitle(input.text);
+  const title = tidyTitle(input.title) || deriveTitle(input.text);
   const existing = docs.find((d) => d.text === input.text);
   let doc: SavedDocument;
   if (existing) {
@@ -196,9 +196,30 @@ export function deriveTitle(text: string): string {
   if (!clean) return "Untitled";
   // Only look at the beginning; splitting a whole book just for the title is wasteful.
   const first = splitSentences(clean.slice(0, 500))[0]?.text ?? clean;
-  if (first.length <= TITLE_MAX_LENGTH) return first;
-  const slice = first.slice(0, TITLE_MAX_LENGTH + 1);
+  return truncateTitle(first);
+}
+
+/** Truncates a title to TITLE_MAX_LENGTH characters with ellipsis at a word boundary */
+function truncateTitle(title: string): string {
+  if (title.length <= TITLE_MAX_LENGTH) return title;
+  const slice = title.slice(0, TITLE_MAX_LENGTH + 1);
   const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : first.slice(0, TITLE_MAX_LENGTH);
+  const cut = lastSpace > 0 ? slice.slice(0, lastSpace) : title.slice(0, TITLE_MAX_LENGTH);
   return `${cut.replace(/[\s,;:.\-–—]+$/, "")}…`;
+}
+
+/** Tidies a given title by collapsing whitespace and truncating if necessary */
+function tidyTitle(title: string): string {
+  // Collapse whitespace to single spaces
+  const collapsed = title.replace(/\s+/g, " ").trim();
+  
+  // If the collapsed title is empty, return empty string (this will trigger deriveTitle)
+  if (!collapsed) return "";
+  
+  // Truncate if too long
+  if (collapsed.length > TITLE_MAX_LENGTH) {
+    return truncateTitle(collapsed);
+  }
+  
+  return collapsed;
 }
