@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { splitParagraphs, splitSentences } from "@/lib/text/segment";
 import { countWords } from "@/lib/text/wordCount";
 
 const MAX_CHARS = 200_000;
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   // Check if content type is JSON
   const contentType = request.headers.get("content-type");
   if (!contentType?.includes("application/json")) {

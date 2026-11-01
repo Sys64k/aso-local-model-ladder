@@ -197,6 +197,9 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
       return;
     }
 
+    // Create a unique ID for this request to handle out-of-order responses
+    const requestId = ++runIdRef.current;
+
     // Debounce the request to avoid too frequent calls
     statsTimeoutRef.current = setTimeout(async () => {
       try {
@@ -205,6 +208,11 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
         });
+
+        // Only process the response if this is still the latest request
+        if (requestId !== runIdRef.current) {
+          return;
+        }
 
         if (!res.ok) {
           // If request fails, clear stats
@@ -226,7 +234,10 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
         }
       } catch (err) {
         // If request fails, clear stats  
-        setStats(null);
+        // Only process the response if this is still the latest request
+        if (requestId === runIdRef.current) {
+          setStats(null);
+        }
       }
     }, 500); // Debounce for 500ms
   }, []);
