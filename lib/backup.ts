@@ -92,16 +92,23 @@ export function importBackup(json: string, storage?: Storage | null): void {
   // Combine existing documents with imported ones, sort by updatedAt, and limit to MAX_DOCUMENTS
   const existingDocs = listDocuments(store);
   
-  // Create a map of existing docs for quick lookup
-  const existingDocMap = new Map<string, SavedDocument>();
-  for (const doc of existingDocs) {
-    existingDocMap.set(doc.id, doc);
+  // Create a map of imported docs for quick lookup to ensure we're not duplicating IDs
+  const importedDocMap = new Map<string, SavedDocument>();
+  for (const doc of documents) {
+    importedDocMap.set(doc.id, doc);
   }
   
-  // Merge imported documents with existing ones
-  const mergedDocs = [...documents];
+  // Merge existing and imported documents
+  const mergedDocs: SavedDocument[] = [];
+  
+  // First, add all imported docs (they replace existing ones with same id)
+  for (const doc of documents) {
+    mergedDocs.push(doc);
+  }
+  
+  // Then, add any existing docs that aren't in the import
   for (const existingDoc of existingDocs) {
-    if (!mergedDocs.some((doc) => doc.id === existingDoc.id)) {
+    if (!importedDocMap.has(existingDoc.id)) {
       mergedDocs.push(existingDoc);
     }
   }
@@ -123,7 +130,6 @@ export function importBackup(json: string, storage?: Storage | null): void {
     store.setItem(DOCUMENTS_STORAGE_KEY, docsJson);
   } catch (e) {
     // If there's an error during writing, we should not change anything
-    // (this implementation assumes everything is written in one go)
     throw new Error(`Failed to import backup: ${e instanceof Error ? e.message : 'unknown error'}`);
   }
 }
