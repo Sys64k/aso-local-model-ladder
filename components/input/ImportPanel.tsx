@@ -511,7 +511,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
                 className="block min-h-48 w-full rounded-lg border-2 border-current bg-transparent p-3 text-lg"
               />
               {stats && (
-                <div className="mt-2 text-lg">
+                <div className="mt-2 grid grid-cols-2 gap-2 text-lg">
                   <span className="mr-4">Words: {stats.words}</span>
                   <span className="mr-4">Sentences: {stats.sentences}</span>
                   <span className="mr-4">Paragraphs: {stats.paragraphs}</span>
