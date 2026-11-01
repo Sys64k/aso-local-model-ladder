@@ -351,6 +351,172 @@ describe("web page", () => {
   });
 });
 
+describe("text statistics", () => {
+  const LONG = "Hello there, friend."; // exactly 20 characters
+  const SHORT = "Hello there friend."; // 19 characters
+  const STATS = { words: 123, sentences: 7, paragraphs: 3, minutes: 2 };
+
+  function jsonResponse(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  /** Matches "123 words" as well as "Words: 123". */
+  function stat(n: number, label: string) {
+    return new RegExp(`((?<![\\d.])${n}\\s*${label})|(${label}\\w*\\s*:?\\s*${n}(?!\\d))`, "i");
+  }
+
+  function pastePanel() {
+    return screen.getByRole("tabpanel");
+  }
+
+  function panelText() {
+    return pastePanel().textContent ?? "";
+  }
+
+  function expectStats(s: typeof STATS) {
+    const text = panelText();
+    expect(text).toMatch(stat(s.words, "words?"));
+    expect(text).toMatch(stat(s.sentences, "sentences?"));
+    expect(text).toMatch(stat(s.paragraphs, "paragraphs?"));
+    expect(text).toMatch(stat(s.minutes, "min"));
+  }
+
+  function expectNoStats() {
+    const text = panelText();
+    expect(text).not.toMatch(/\bwords?\b/i);
+    expect(text).not.toMatch(/\bsentences?\b/i);
+    expect(text).not.toMatch(/\bparagraphs?\b/i);
+    expect(text).not.toMatch(/\bmin(ute)?s?\b/i);
+  }
+
+  function paste(text: string) {
+    fireEvent.change(screen.getByLabelText("Text to read"), { target: { value: text } });
+  }
+
+  function statsCalls() {
+    return fetchMock.mock.calls.filter(([endpoint]) => endpoint === "/api/stats");
+  }
+
+  const wait = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
+
+  it("shows nothing before any text is pasted", () => {
+    setup();
+    expectNoStats();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("posts pasted text to /api/stats and shows the numbers under it", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(STATS));
+    setup();
+    paste(LONG);
+    await waitFor(() => expectStats(STATS));
+    expect(statsCalls().length).toBeGreaterThanOrEqual(1);
+    const [, init] = statsCalls()[statsCalls().length - 1];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ text: LONG });
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+  });
+
+  it("does not fetch or show numbers for text under 20 characters", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(STATS));
+    setup();
+    paste(SHORT);
+    await wait(700);
+    expect(statsCalls()).toHaveLength(0);
+    expectNoStats();
+  });
+
+  it("does not count surrounding whitespace towards the 20 characters", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(STATS));
+    setup();
+    paste(`   ${SHORT}   \n\n`);
+    await wait(700);
+    expect(statsCalls()).toHaveLength(0);
+    expectNoStats();
+  });
+
+  it("hides the numbers when the text becomes too short again", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(STATS));
+    setup();
+    paste(LONG);
+    await waitFor(() => expectStats(STATS));
+    paste(SHORT);
+    await waitFor(() => expectNoStats());
+  });
+
+  it("shows the numbers for the latest text when responses arrive out of order", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    fetchMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    setup();
+    paste(LONG);
+    await waitFor(() => expect(statsCalls()).toHaveLength(1));
+    const later = `${LONG} And some more words here.`;
+    paste(later);
+    await waitFor(() => expect(statsCalls()).toHaveLength(2));
+    expect(JSON.parse(statsCalls()[1][1].body)).toEqual({ text: later });
+
+    const latest = { words: 9, sentences: 2, paragraphs: 1, minutes: 1 };
+    await act(async () => second.resolve(jsonResponse(latest)));
+    await waitFor(() => expectStats(latest));
+    await act(async () => first.resolve(jsonResponse(STATS)));
+    await wait(50);
+    expectStats(latest);
+    expect(panelText()).not.toMatch(stat(STATS.words, "words?"));
+  });
+
+  it("shows no numbers and no error when the request fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    setup();
+    paste(LONG);
+    await waitFor(() => expect(statsCalls().length).toBeGreaterThanOrEqual(1));
+    await wait(50);
+    expectNoStats();
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["a 413 response", () => jsonResponse({ error: "too_large" }, 413)],
+    ["a 500 response", () => jsonResponse({ error: "boom" }, 500)],
+    ["a non-JSON response", () => new Response("<html>oops</html>", { status: 200 })],
+    ["a response without numbers", () => jsonResponse({ hello: "world" })],
+  ])("shows no numbers and no error for %s", async (_label, make) => {
+    fetchMock.mockImplementation(async () => make());
+    setup();
+    paste(LONG);
+    await waitFor(() => expect(statsCalls().length).toBeGreaterThanOrEqual(1));
+    await wait(50);
+    expectNoStats();
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("clears earlier numbers when a later request fails", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(STATS)).mockRejectedValue(new TypeError("Failed to fetch"));
+    setup();
+    paste(LONG);
+    await waitFor(() => expectStats(STATS));
+    paste(`${LONG} With a few more words.`);
+    await waitFor(() => expect(statsCalls()).toHaveLength(2));
+    await waitFor(() => expectNoStats());
+    expect(screen.getByRole("alert")).toHaveTextContent("");
+  });
+
+  it("still imports pasted text when the stats request fails", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { user, onImport } = setup();
+    paste(LONG);
+    await user.click(screen.getByRole("button", { name: "Read this text" }));
+    expect(onImport).toHaveBeenCalledTimes(1);
+    expect(onImport.mock.calls[0][0]).toMatchObject({ text: LONG, source: "paste" });
+  });
+});
+
 describe("progress, status and cancel", () => {
   it("has a polite status region and an alert region", () => {
     setup();
