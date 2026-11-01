@@ -454,7 +454,7 @@ describe("text statistics", () => {
     setup();
     paste(LONG);
     await waitFor(() => expect(statsCalls()).toHaveLength(1));
-    const later = `${LONG} And some more words here.`;
+    const later = `${LONG} And some more text here.`;
     paste(later);
     await waitFor(() => expect(statsCalls()).toHaveLength(2));
     expect(JSON.parse(statsCalls()[1][1].body)).toEqual({ text: later });
@@ -501,7 +501,8 @@ describe("text statistics", () => {
     setup();
     paste(LONG);
     await waitFor(() => expectStats(STATS));
-    paste(`${LONG} With a few more words.`);
+    // Pasted text must not contain words/sentences/paragraphs/min itself.
+    paste(`${LONG} With a little more text.`);
     await waitFor(() => expect(statsCalls()).toHaveLength(2));
     await waitFor(() => expectNoStats());
     expect(screen.getByRole("alert")).toHaveTextContent("");
