@@ -232,7 +232,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
           // Invalid data, clear stats
           setStats(null);
         }
-      } catch (err) {
+      } catch {
         // If request fails, clear stats  
         // Only process the response if this is still the latest request
         if (requestId === runIdRef.current) {
