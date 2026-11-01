@@ -113,6 +113,12 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [stats, setStats] = useState<{
+    words: number;
+    sentences: number;
+    paragraphs: number;
+    minutes: number;
+  } | null>(null);
 
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +129,7 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
   const runIdRef = useRef(0);
   const lastBucketRef = useRef(-1);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const statsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Abort any running work when the panel goes away.
   useEffect(() => {
@@ -131,6 +138,9 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
     return () => {
       runIds.current++;
       aborts.current?.abort();
+      if (statsTimeoutRef.current) {
+        clearTimeout(statsTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -172,6 +182,54 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
     },
     [],
   );
+
+  const fetchStats = useCallback((text: string) => {
+    // Cancel any pending stats requests
+    if (statsTimeoutRef.current) {
+      clearTimeout(statsTimeoutRef.current);
+      statsTimeoutRef.current = null;
+    }
+
+    // Only fetch for text that is at least 20 characters after trimming
+    const trimmedText = text.trim();
+    if (trimmedText.length < 20) {
+      setStats(null);
+      return;
+    }
+
+    // Debounce the request to avoid too frequent calls
+    statsTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/stats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!res.ok) {
+          // If request fails, clear stats
+          setStats(null);
+          return;
+        }
+
+        const data = await res.json();
+        
+        // Validate the response structure
+        if (typeof data.words === 'number' && 
+            typeof data.sentences === 'number' && 
+            typeof data.paragraphs === 'number' && 
+            typeof data.minutes === 'number') {
+          setStats(data);
+        } else {
+          // Invalid data, clear stats
+          setStats(null);
+        }
+      } catch (err) {
+        // If request fails, clear stats  
+        setStats(null);
+      }
+    }, 500); // Debounce for 500ms
+  }, []);
 
   const run = useCallback(
     async (kind: BusyKind, work: (signal: AbortSignal) => Promise<ImportedText>) => {
@@ -445,10 +503,21 @@ export function ImportPanel({ onImport }: { onImport: (doc: ImportedText) => voi
                 id={id("paste")}
                 ref={textareaRef}
                 value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
+                onChange={(e) => {
+                  setPasteText(e.target.value);
+                  fetchStats(e.target.value);
+                }}
                 rows={8}
                 className="block min-h-48 w-full rounded-lg border-2 border-current bg-transparent p-3 text-lg"
               />
+              {stats && (
+                <div className="mt-2 text-lg">
+                  <span className="mr-4">{stats.words} words</span>
+                  <span className="mr-4">{stats.sentences} sentences</span>
+                  <span className="mr-4">{stats.paragraphs} paragraphs</span>
+                  <span>{stats.minutes} minute{stats.minutes !== 1 ? 's' : ''}</span>
+                </div>
+              )}
               <button type="submit" className={PRIMARY_BUTTON}>
                 Read this text
               </button>
