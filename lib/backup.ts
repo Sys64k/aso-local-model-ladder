@@ -92,29 +92,23 @@ export function importBackup(json: string, storage?: Storage | null): void {
   // Combine existing documents with imported ones, sort by updatedAt, and limit to MAX_DOCUMENTS
   const existingDocs = listDocuments(store);
   
-  // Create a map of imported docs for quick lookup to ensure we're not duplicating IDs
-  const importedDocMap = new Map<string, SavedDocument>();
+  // Create a map of all documents (imported take precedence over existing)
+  const allDocsMap = new Map<string, SavedDocument>();
+  
+  // Add imported docs (they override existing)
   for (const doc of documents) {
-    importedDocMap.set(doc.id, doc);
+    allDocsMap.set(doc.id, doc);
   }
   
-  // Merge existing and imported documents
-  const mergedDocs: SavedDocument[] = [];
-  
-  // First, add all imported docs (they replace existing ones with same id)
-  for (const doc of documents) {
-    mergedDocs.push(doc);
-  }
-  
-  // Then, add any existing docs that aren't in the import
+  // Add existing docs that aren't in the import
   for (const existingDoc of existingDocs) {
-    if (!importedDocMap.has(existingDoc.id)) {
-      mergedDocs.push(existingDoc);
+    if (!allDocsMap.has(existingDoc.id)) {
+      allDocsMap.set(existingDoc.id, existingDoc);
     }
   }
   
-  // Sort by updatedAt descending (newest first)
-  mergedDocs.sort((a, b) => b.updatedAt - a.updatedAt);
+  // Convert map back to array and sort by updatedAt descending (newest first)
+  const mergedDocs = Array.from(allDocsMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
   
   // Apply the cap of MAX_DOCUMENTS
   const cappedDocs = mergedDocs.slice(0, MAX_DOCUMENTS);
