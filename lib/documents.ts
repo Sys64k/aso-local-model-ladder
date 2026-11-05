@@ -183,6 +183,9 @@ export function notePreview(note: string, max = NOTE_PREVIEW_LENGTH): string {
   return `${stripped || clean.slice(0, max)}…`;
 }
 
+export function clearDocuments(storage?: Storage | null): void {
+  write(storage, []);
+}
 export function deleteDocument(id: string, storage?: Storage | null): void {
   const store = resolve(storage);
   const docs = read(store);
