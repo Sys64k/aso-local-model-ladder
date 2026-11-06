@@ -59,6 +59,8 @@ list `aso-test` as a project after its next restart.
 
 ## Licence
 
-[MIT](LICENSE), except `tests/fixtures/wikipedia-article.html`. That test file is modelled on
-Wikipedia's [Lighthouse keeper](https://en.wikipedia.org/wiki/Lighthouse_keeper) article, and its
-text is under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+[MIT](LICENSE), except `tests/fixtures/wikipedia-article.html`, a test page made to look like a
+Wikipedia article. Three of its sentences are adapted, with small changes, from Wikipedia's
+[Lighthouse keeper](https://en.wikipedia.org/wiki/Lighthouse_keeper) article. The rest doesn't match
+that article as it stood on 6 November 2026, but that file as a whole is under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
